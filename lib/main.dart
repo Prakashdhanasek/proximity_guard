@@ -1,121 +1,139 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'dart:developer';
+import 'controllers/auth_controller.dart';
+import 'controllers/vehicle_controller.dart';
+import 'controllers/checklist_controller.dart';
+import 'controllers/pre_trip_controller.dart';
+import 'controllers/trip_controller.dart';
+import 'controllers/settings_controller.dart';
+import 'l10n/app_localizations.dart';
+import 'views/theme/app_theme.dart';
+import 'views/splash_screen.dart';
 
 void main() {
-  runApp(const MyApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+  GoogleFonts.config.allowRuntimeFetching = false;
+  runApp(const ProximityGuardDriveApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  // This widget is the root of your application.
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
-  }
-}
-
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+class ProximityGuardDriveApp extends StatelessWidget {
+  const ProximityGuardDriveApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthController()),
+        ChangeNotifierProvider(create: (_) => VehicleController()),
+        ChangeNotifierProvider(create: (_) => ChecklistController()),
+        ChangeNotifierProvider(create: (_) => PreTripController()),
+        ChangeNotifierProvider(create: (_) => TripController()),
+        ChangeNotifierProvider(create: (_) => SettingsController()),
+      ],
+      child: Consumer<SettingsController>(
+        builder: (context, settings, _) => MaterialApp(
+          title: 'Proximity Guard Drive',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: settings.themeMode,
+          locale: Locale(settings.locale),
+          supportedLocales: SettingsController.supportedLocales.keys
+              .map((code) => Locale(code))
+              .toList(),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
           ],
+          builder: (context, child) {
+          double height = MediaQuery.of(context).size.height;
+          double width = MediaQuery.of(context).size.width;
+
+          // Set orientation based on device type
+          final shortestSide = MediaQuery.of(context).size.shortestSide;
+          if (shortestSide >= 600) {
+            // Tablet: allow both portrait and landscape
+            SystemChrome.setPreferredOrientations([
+              DeviceOrientation.portraitUp,
+              DeviceOrientation.portraitDown,
+              DeviceOrientation.landscapeLeft,
+              DeviceOrientation.landscapeRight,
+            ]);
+          } else {
+            // Mobile: portrait only
+            SystemChrome.setPreferredOrientations([
+              DeviceOrientation.portraitUp,
+              DeviceOrientation.portraitDown,
+            ]);
+          }
+
+          // Decide scaling based on device size
+          double scale;
+
+          if (height <= 640 && width <= 320) {
+            scale = 0.7;
+            log("very small phone");
+          } else if (height <= 800 && width <= 480) {
+            scale = 0.8;
+            log("small phone");
+          } else if ((height == 1136 && width == 640) ||
+              (height == 1334 && width == 750)) {
+            scale = 0.95;
+            log("iPhone SE / iPhone 6/7/8");
+          } else if ((height == 1792 && width == 828) ||
+              (height == 2436 && width == 1125)) {
+            scale = 1.0;
+            log("iPhone XR / iPhone X / XS / 11 Pro");
+          } else if ((height == 2532 && width == 1170) ||
+              (height == 2778 && width == 1284) ||
+              (height == 2796 && width == 1290)) {
+            scale = 1.1;
+            log("iPhone 12/13/14 Pro Max");
+          } else if (height <= 1280 && width <= 720) {
+            scale = 0.9;
+            log("normal phone");
+          } else if (height <= 1920 && width <= 1080) {
+            scale = 1.0;
+            log("large phone (phablet)");
+          } else if (height <= 2048 && width <= 1536) {
+            scale = 1.2;
+            log("small tablet");
+          } else if (height <= 2560 && width <= 2048) {
+            scale = 1.5;
+            log("large tablet");
+          } else if (height <= 2960 && width <= 1440) {
+            scale = 1.3;
+            log("high-res large phone");
+          } else if (height <= 2200 && width <= 1080) {
+            scale = 1.1;
+            log("foldable phone");
+          } else if (height > 2560 || width > 1600) {
+            scale = 1.6;
+            log("ultra-large device");
+          } else {
+            scale = 1.0;
+            log("default device scale");
+          }
+
+          return MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(scale),
+            ),
+            child: child!,
+          );
+        },
+        home: const SplashScreen(),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ),
     );
   }
