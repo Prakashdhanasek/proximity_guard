@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:proximity_guard/views/login_screen.dart';
 import '../views/theme/app_theme.dart';
 import 'pre_trip/pre_trip_flow_view.dart';
 
@@ -123,14 +124,14 @@ class _SplashScreenState extends State<SplashScreen>
 
     await Future.delayed(const Duration(milliseconds: 2800));
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const PreTripFlowView(),
-        transitionsBuilder: (_, animation, __, child) =>
-            FadeTransition(opacity: animation, child: child),
-        transitionDuration: const Duration(milliseconds: 600),
-      ),
-    );
+   Navigator.of(context).pushReplacement(
+  PageRouteBuilder(
+    pageBuilder: (_, __, ___) => const LoginScreen(),
+    transitionsBuilder: (_, animation, __, child) =>
+        FadeTransition(opacity: animation, child: child),
+    transitionDuration: const Duration(milliseconds: 600),
+  ),
+);
   }
 
   @override

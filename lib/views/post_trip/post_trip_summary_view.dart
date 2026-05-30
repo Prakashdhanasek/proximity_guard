@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:proximity_guard/views/live_route_map.dart';
 import '../../controllers/trip_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../models/trip_summary_model.dart';
@@ -241,6 +242,17 @@ class PostTripSummaryView extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+          LiveRouteMap(
+  progress: 1.0,
+  routeName: summary.routeName,
+  incidents: summary.incidents.map((inc) {
+    final total = summary.duration.inSeconds == 0 ? 1 : summary.duration.inSeconds;
+    return MapIncident(
+      progress: (inc.timestampInTrip.inSeconds / total).clamp(0.0, 1.0),
+      color: inc.alert.severity == AlertSeverity.critical ? AppTheme.danger : AppTheme.warning,
+    );
+  }).toList(),
+),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

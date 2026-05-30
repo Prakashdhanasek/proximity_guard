@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:proximity_guard/views/live_route_map.dart';
 import '../../controllers/trip_controller.dart';
 import '../../models/trip_data_model.dart';
 import '../../models/trip_alert_model.dart';
@@ -54,6 +55,14 @@ class DrivingHudView extends StatelessWidget {
                             child: Column(
                               children: [
                                 _buildDistanceCard(context, data),
+                                const SizedBox(height: 12),
+                                LiveRouteMap(
+                                  progress: data.routeProgress,
+                                  routeName: data.routeName,
+                                  isLive: true,
+                                  inGeofence: data.isInGeofence,
+                                  speedKmh: data.currentSpeed,
+                                ),
                                 const SizedBox(height: 12),
                                 _buildRouteCard(context, data),
                                 const SizedBox(height: 12),
@@ -549,6 +558,7 @@ class DrivingHudView extends StatelessWidget {
       ),
     );
   }
+
 
   Widget _buildRouteCard(BuildContext context, TripDataModel data) {
     return Container(

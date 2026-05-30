@@ -16,10 +16,14 @@ class AuthMethodSelectorView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AuthController>(
       builder: (context, authController, _) {
-        if (authController.currentMethod != null &&
-            authController.status != AuthStatus.idle) {
-          return _buildActiveAuthView(authController.currentMethod!);
-        }
+        // if (authController.currentMethod != null &&
+        //     authController.status != AuthStatus.idle) {
+        //   return _buildActiveAuthView(authController.currentMethod!);
+        // }
+
+        if (authController.currentMethod != null) {
+  return _buildActiveAuthView(authController.currentMethod!);
+}
 
         return SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
