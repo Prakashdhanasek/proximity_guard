@@ -1,19 +1,414 @@
+import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:provider/provider.dart';
 import 'package:proximity_guard/views/live_route_map.dart';
 import '../../controllers/trip_controller.dart';
+import '../../controllers/settings_controller.dart';
+import '../../models/general_models.dart';
 import '../../models/trip_data_model.dart';
 import '../../models/trip_alert_model.dart';
+import '../../core/monitor_state.dart' as sd;
+import '../../core/monitoring_engine.dart';
+import '../../core/object_detector_engine.dart';
 import '../theme/app_theme.dart';
 import '../general/settings_hub_view.dart';
 import '../post_trip/post_trip_summary_view.dart';
 import 'trip_alert_overlay.dart';
 
-class DrivingHudView extends StatelessWidget {
+class DrivingHudView extends StatefulWidget {
   const DrivingHudView({super.key});
+
+  @override
+  State<DrivingHudView> createState() => _DrivingHudViewState();
+}
+
+class _DrivingHudViewState extends State<DrivingHudView> {
+  // ── Camera monitoring pipeline ─────────────────────────────────────────────
+  CameraController? _camera;
+  FaceDetector? _detector;
+  late final sd.MonitorState _monitor;
+  late final MonitoringEngine _monitoringEngine;
+  final ObjectDetectorEngine _objectDetector = ObjectDetectorEngine();
+  final AudioPlayer _audioPlayer = AudioPlayer();
+
+  TripController? _trip;
+  SettingsController? _settings;
+  DateTime _lastAlarmTime = DateTime(2000);
+  final Map<String, DateTime> _lastNotify = {};
+  bool _camReady = false;
+  bool _streaming = false;
+  bool _isProcessing = false;
+  int _frameIndex = 0;
+
+  // When true, the camera fills the screen and the HUD shrinks to a thumbnail.
+  bool _cameraExpanded = false;
+
+  // Transition trackers so we only push an alert on state changes.
+  sd.DrowsinessLevel _lastDrowsy = sd.DrowsinessLevel.alert;
+  sd.DistractionStatus _lastDistract = sd.DistractionStatus.forward;
+
+  @override
+  void initState() {
+    super.initState();
+    _monitor = sd.MonitorState();
+    _monitoringEngine = MonitoringEngine(_monitor);
+    _initMonitoring();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _trip ??= context.read<TripController>();
+    _settings ??= context.read<SettingsController>();
+  }
+
+  Future<void> _initMonitoring() async {
+    // Object detector (YOLOv8n). Safe to await even if model is missing.
+    try {
+      await _objectDetector.initialize();
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    // Live face detector WITH contours + landmarks (needed for EAR / head pose).
+    _detector = FaceDetector(
+      options: FaceDetectorOptions(
+        enableContours: true,
+        enableLandmarks: true,
+        enableTracking: true,
+        performanceMode: FaceDetectorMode.fast,
+      ),
+    );
+
+    await _initCamera();
+  }
+
+  Future<void> _initCamera() async {
+    try {
+      final cams = await availableCameras();
+      CameraDescription? front;
+      for (final c in cams) {
+        if (c.lensDirection == CameraLensDirection.front) {
+          front = c;
+          break;
+        }
+      }
+      front ??= cams.isNotEmpty ? cams.first : null;
+      if (front == null) return;
+
+      final controller = CameraController(
+        front,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.yuv420,
+      );
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      _camera = controller;
+      setState(() => _camReady = true);
+      await controller.startImageStream(_processImage);
+      _streaming = true;
+    } catch (_) {
+      // monitoring simply stays off if the camera can't start
+    }
+  }
+
+  Future<void> _processImage(CameraImage image) async {
+    if (_isProcessing || !_camReady || _detector == null) return;
+    _isProcessing = true;
+    _frameIndex++;
+
+    try {
+      final inputImage = _buildInputImage(image);
+      if (inputImage == null) return;
+
+      final allFaces = await _detector!.processImage(inputImage);
+      final faces = allFaces.where((f) => f.boundingBox.width > 50).toList();
+      _monitor.faceCount = faces.length;
+
+      if (_frameIndex % 30 == 0) {
+        debugPrint('[MonitorDBG] frame=$_frameIndex faces=${faces.length} cal=${_monitor.calibrated}(${_monitor.calibrationFrame}) drowsy=${_monitor.drowsinessLevel} distract=${_monitor.distractionStatus} objects=${_monitor.detectedObjects.length}');
+      }
+
+      if (faces.length == 1) {
+        _monitoringEngine.processFrame(faces.first);
+      } else {
+        _monitoringEngine.processFrame(null);
+      }
+
+      _pushDrowsinessAndDistraction();
+
+      // Object detection every 30 frames.
+      if (_frameIndex % 30 == 0) {
+        _objectDetector.processFrame(
+          image,
+          _monitor,
+          _camera!.description.sensorOrientation,
+        );
+        _pushBannedObjects();
+      }
+
+      // Audio alarm (same behaviour as SafeDrive).
+      _handleAlarms();
+    } catch (_) {
+      // ignore transient frame errors
+    } finally {
+      _isProcessing = false;
+      // Live-refresh the SafeDrive-style overlay while the camera is expanded.
+      if (_cameraExpanded && mounted) setState(() {});
+    }
+  }
+
+  // Plays alert sounds the same way SafeDrive does:
+  //  - loud alarm when asleep (throttled 1.5s)
+  //  - soft alarm for drowsy / distracted / banned object (throttled 3s)
+  void _handleAlarms() {
+    final now = DateTime.now();
+    final msSinceLast = now.difference(_lastAlarmTime).inMilliseconds;
+
+    String? soundAsset;
+    if (_monitor.drowsinessLevel == sd.DrowsinessLevel.asleep && msSinceLast > 1500) {
+      soundAsset = 'audio/alert_loud.mp3';
+    } else if ((_monitor.drowsinessLevel == sd.DrowsinessLevel.drowsy ||
+            _monitor.distractionStatus == sd.DistractionStatus.distracted ||
+            _monitor.detectedObjects.isNotEmpty) &&
+        msSinceLast > 3000) {
+      soundAsset = 'audio/alert_soft.mp3';
+    }
+
+    if (soundAsset != null) {
+      _lastAlarmTime = now;
+      _audioPlayer.play(AssetSource(soundAsset)).catchError((e) {
+        debugPrint('[Audio] Play error: $e');
+      });
+    }
+  }
+
+  // Pushes a notification into the app's notification center (throttled per key
+  // so the same event doesn't spam while it persists).
+  void _notify(String key, String title, String message) {
+    final settings = _settings;
+    if (settings == null) return;
+    final now = DateTime.now();
+    final last = _lastNotify[key];
+    if (last != null && now.difference(last).inSeconds < 8) return;
+    _lastNotify[key] = now;
+    settings.addNotification(
+      type: NotificationType.safetyWarning,
+      title: title,
+      message: message,
+    );
+  }
+
+  void _pushDrowsinessAndDistraction() {
+    final trip = _trip;
+    if (trip == null) return;
+
+    // Drowsiness — only on level change, and only when not "alert".
+    if (_monitor.drowsinessLevel != _lastDrowsy) {
+      _lastDrowsy = _monitor.drowsinessLevel;
+      if (_monitor.drowsinessLevel == sd.DrowsinessLevel.asleep) {
+        trip.pushCameraAlert(
+          type: AlertType.drowsiness,
+          severity: AlertSeverity.critical,
+          title: 'Drowsiness Detected',
+          message: 'Eyes closed / head dropping — wake up and take a break.',
+        );
+        _notify('drowsy', 'Drowsiness Alert',
+            'Driver appears asleep at the wheel. Immediate attention needed.');
+      } else if (_monitor.drowsinessLevel == sd.DrowsinessLevel.drowsy) {
+        trip.pushCameraAlert(
+          type: AlertType.drowsiness,
+          severity: AlertSeverity.high,
+          title: 'Drowsiness Detected',
+          message: 'Signs of drowsiness detected. Consider taking a break.',
+        );
+        _notify('drowsy', 'Drowsiness Detected',
+            'Signs of drowsiness detected during the trip.');
+      }
+    }
+
+    // Distraction (head turned away too long).
+    if (_monitor.distractionStatus != _lastDistract) {
+      _lastDistract = _monitor.distractionStatus;
+      if (_monitor.distractionStatus == sd.DistractionStatus.distracted) {
+        trip.pushCameraAlert(
+          type: AlertType.distraction,
+          severity: AlertSeverity.high,
+          title: 'Distraction Alert',
+          message: 'Eyes off the road. Keep your focus ahead.',
+        );
+        _notify('distract', 'Distraction Alert',
+            'Driver was looking away from the road.');
+      }
+    }
+  }
+
+  void _pushBannedObjects() {
+    final trip = _trip;
+    if (trip == null) return;
+
+    for (final sd.DetectedObject obj in _monitor.detectedObjects) {
+      if (obj.label == 'Cell Phone') {
+        trip.pushCameraAlert(
+          type: AlertType.distraction,
+          severity: AlertSeverity.high,
+          title: 'Phone Detected',
+          message: 'Put the phone away — keep both eyes on the road.',
+        );
+        _notify('obj_${obj.label}', 'Phone Usage Detected',
+            'Mobile phone detected while driving.');
+      } else if (['Bottle', 'Wine Glass', 'Cup'].contains(obj.label)) {
+        trip.pushCameraAlert(
+          type: AlertType.distraction,
+          severity: AlertSeverity.medium,
+          title: 'Drink Detected',
+          message: 'No drinking while driving (${obj.label}).',
+        );
+        _notify('obj_${obj.label}', 'Drinking Detected',
+            '${obj.label} detected in the vehicle while driving.');
+      } else if (['Banana', 'Apple', 'Sandwich', 'Orange', 'Hot Dog', 'Pizza', 'Donut', 'Cake']
+          .contains(obj.label)) {
+        trip.pushCameraAlert(
+          type: AlertType.distraction,
+          severity: AlertSeverity.medium,
+          title: 'Food Detected',
+          message: 'No eating while driving (${obj.label}).',
+        );
+        _notify('obj_${obj.label}', 'Eating Detected',
+            '${obj.label} detected in the vehicle while driving.');
+      }
+    }
+  }
+
+  InputImageRotation? _rotationFor(CameraController controller) {
+    final sensorOrientation = controller.description.sensorOrientation;
+    if (Platform.isIOS) {
+      return InputImageRotationValue.fromRawValue(sensorOrientation);
+    }
+    var rotationCompensation = 0;
+    final orientation = controller.value.deviceOrientation;
+    if (orientation == DeviceOrientation.portraitUp) {
+      rotationCompensation = 0;
+    } else if (orientation == DeviceOrientation.landscapeLeft) {
+      rotationCompensation = 90;
+    } else if (orientation == DeviceOrientation.portraitDown) {
+      rotationCompensation = 180;
+    } else if (orientation == DeviceOrientation.landscapeRight) {
+      rotationCompensation = 270;
+    }
+    if (controller.description.lensDirection == CameraLensDirection.front) {
+      rotationCompensation = (sensorOrientation + rotationCompensation) % 360;
+    } else {
+      rotationCompensation = (sensorOrientation - rotationCompensation + 360) % 360;
+    }
+    return InputImageRotationValue.fromRawValue(rotationCompensation);
+  }
+
+  InputImage? _buildInputImage(CameraImage image) {
+    final controller = _camera;
+    if (controller == null || image.planes.isEmpty) return null;
+
+    final rotation = _rotationFor(controller);
+    if (rotation == null) return null;
+
+    if (Platform.isAndroid) {
+      // Proper NV21 packing (respects row/pixel stride). The naive
+      // plane-concatenation breaks on devices where rowStride != width,
+      // which makes ML Kit detect zero faces.
+      final nv21 = _yuv420ToNv21(image);
+      return InputImage.fromBytes(
+        bytes: nv21,
+        metadata: InputImageMetadata(
+          size: Size(image.width.toDouble(), image.height.toDouble()),
+          rotation: rotation,
+          format: InputImageFormat.nv21,
+          bytesPerRow: image.width,
+        ),
+      );
+    } else {
+      return InputImage.fromBytes(
+        bytes: image.planes.first.bytes,
+        metadata: InputImageMetadata(
+          size: Size(image.width.toDouble(), image.height.toDouble()),
+          rotation: rotation,
+          format: InputImageFormat.bgra8888,
+          bytesPerRow: image.planes.first.bytesPerRow,
+        ),
+      );
+    }
+  }
+
+  /// YUV_420_888 (3 planes) -> packed NV21 (Y followed by interleaved V,U),
+  /// correctly handling row stride and pixel stride.
+  Uint8List _yuv420ToNv21(CameraImage image) {
+    final int width = image.width;
+    final int height = image.height;
+
+    final Plane yPlane = image.planes[0];
+    final Plane uPlane = image.planes[1];
+    final Plane vPlane = image.planes[2];
+
+    final int ySize = width * height;
+    final int uvSize = (width ~/ 2) * (height ~/ 2) * 2;
+    final Uint8List nv21 = Uint8List(ySize + uvSize);
+
+    final int yRowStride = yPlane.bytesPerRow;
+    int pos = 0;
+    if (yRowStride == width) {
+      nv21.setRange(0, ySize, yPlane.bytes);
+      pos = ySize;
+    } else {
+      final yb = yPlane.bytes;
+      for (int row = 0; row < height; row++) {
+        nv21.setRange(pos, pos + width, yb, row * yRowStride);
+        pos += width;
+      }
+    }
+
+    final Uint8List ub = uPlane.bytes;
+    final Uint8List vb = vPlane.bytes;
+    final int uvRowStride = uPlane.bytesPerRow;
+    final int uvPixelStride = uPlane.bytesPerPixel ?? 1;
+    final int chromaH = height ~/ 2;
+    final int chromaW = width ~/ 2;
+    for (int row = 0; row < chromaH; row++) {
+      final int rowStart = row * uvRowStride;
+      for (int col = 0; col < chromaW; col++) {
+        final int uvOffset = rowStart + col * uvPixelStride;
+        nv21[pos++] = uvOffset < vb.length ? vb[uvOffset] : 0;
+        nv21[pos++] = uvOffset < ub.length ? ub[uvOffset] : 0;
+      }
+    }
+    return nv21;
+  }
+
+  @override
+  void dispose() {
+    final cam = _camera;
+    if (cam != null) {
+      if (_streaming) {
+        cam.stopImageStream().catchError((_) {});
+      }
+      cam.dispose();
+    }
+    _detector?.close();
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  // ─── UI (original DrivingHudView build, with a monitor preview overlay) ──────
 
   @override
   Widget build(BuildContext context) {
@@ -38,9 +433,11 @@ class DrivingHudView extends StatelessWidget {
                 ),
 
                 // Decorative floating shapes
-                ..._buildFloatingShapes(size), 
+                ..._buildFloatingShapes(size),
 
-                SafeArea(
+                // ── HUD (hidden while the camera is expanded) ──
+                if (!_cameraExpanded)
+                  SafeArea(
                   child: Column(
                     children: [
                       if (!isMinimal) _buildHeader(context, tripController),
@@ -79,6 +476,54 @@ class DrivingHudView extends StatelessWidget {
                   ),
                 ),
 
+                // ── Camera: small preview OR full-screen (tap to toggle) ──
+                if (_camReady && _camera != null) ...[
+                  if (_cameraExpanded)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _cameraExpanded = false),
+                        child: _buildFullScreenCamera(),
+                      ),
+                    )
+                  else
+                    Positioned(
+                      left: 16,
+                      bottom: 92,
+                      child: GestureDetector(
+                        onTap: () => setState(() => _cameraExpanded = true),
+                        child: _buildMonitorPreview(),
+                      ),
+                    ),
+                ],
+
+                // ── Minimize + End controls (center-right, clear of overlays) ──
+                if (_cameraExpanded)
+                  Positioned(
+                    right: 12,
+                    top: 0,
+                    bottom: 0,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _expandedActionButton(
+                            icon: Icons.close_fullscreen_rounded,
+                            label: 'Minimize',
+                            color: AppTheme.primary,
+                            onTap: () => setState(() => _cameraExpanded = false),
+                          ),
+                          const SizedBox(height: 12),
+                          _expandedActionButton(
+                            icon: Icons.stop_rounded,
+                            label: 'End',
+                            color: AppTheme.danger,
+                            onTap: () => _showEndTripDialog(context, tripController),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
                 // Alert overlay
                 if (tripController.activeAlerts.isNotEmpty)
                   Positioned(
@@ -97,6 +542,283 @@ class DrivingHudView extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildMonitorPreview() {
+    final cam = _camera!;
+    final ps = cam.value.previewSize;
+    return Container(
+      width: 84,
+      height: 112,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 1.5),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(13),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (ps != null)
+              FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: ps.height,
+                  height: ps.width,
+                  child: CameraPreview(cam),
+                ),
+              ),
+            Positioned(
+              left: 4,
+              bottom: 4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Color(0xFF4ADE80),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'MONITOR',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 7,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFullScreenCamera() {
+    final cam = _camera!;
+    final ps = cam.value.previewSize;
+    return Container(
+      color: Colors.black,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (ps != null)
+            FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: ps.height,
+                height: ps.width,
+                child: CameraPreview(cam),
+              ),
+            ),
+          // SafeDrive-style live detection overlay
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildMonitorStatusBar(),
+                const Spacer(),
+                _buildMonitorBanner(),
+                _buildMonitorDiag(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMonitorStatusBar() {
+    final calText = _monitor.calibrated
+        ? 'CAL ✓'
+        : 'CALIBRATING ${_monitor.calibrationFrame}/${MonitoringEngine.kCalibrationFrames}';
+    final calColor = _monitor.calibrated ? Colors.greenAccent : Colors.amber;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      color: Colors.black.withValues(alpha: 0.55),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF4ADE80)),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'MONITORING',
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            calText,
+            style: GoogleFonts.poppins(
+              color: calColor,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            'FACES: ${_monitor.faceCount}',
+            style: GoogleFonts.poppins(
+              color: Colors.cyanAccent,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMonitorBanner() {
+    Widget? banner;
+    if (_monitor.drowsinessLevel == sd.DrowsinessLevel.asleep) {
+      banner = _monitorBanner(Colors.red, '⚠  WAKE UP — ASLEEP AT WHEEL  ⚠', Colors.white, 20);
+    } else if (_monitor.detectedObjects.isNotEmpty) {
+      final obj = _monitor.detectedObjects.first;
+      String msg = '📵  BANNED OBJECT: ${obj.label.toUpperCase()}';
+      if (['Bottle', 'Wine Glass', 'Cup'].contains(obj.label)) {
+        msg = '🍺  DRINK: ${obj.label.toUpperCase()}';
+      } else if (['Banana', 'Apple', 'Sandwich', 'Orange', 'Hot Dog', 'Pizza', 'Donut', 'Cake']
+          .contains(obj.label)) {
+        msg = '🍔  FOOD: ${obj.label.toUpperCase()}';
+      }
+      banner = _monitorBanner(Colors.purple.shade700, msg, Colors.white, 17);
+    } else if (_monitor.drowsinessLevel == sd.DrowsinessLevel.drowsy) {
+      banner = _monitorBanner(Colors.orange, '⚠  DROWSINESS DETECTED  ⚠', Colors.white, 17);
+    } else if (_monitor.distractionStatus == sd.DistractionStatus.distracted) {
+      banner = _monitorBanner(Colors.yellow.shade700, '⚠  DISTRACTION DETECTED  ⚠', Colors.black, 17);
+    }
+
+    return banner ?? const SizedBox.shrink();
+  }
+
+  Widget _monitorBanner(Color bg, String text, Color fg, double size) {
+    return Container(
+      width: double.infinity,
+      color: bg,
+      padding: const EdgeInsets.all(14),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: GoogleFonts.poppins(color: fg, fontSize: size, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+
+  Widget _buildMonitorDiag() {
+    final distStr = _monitor.authDistance >= 0 ? _monitor.authDistance.toStringAsFixed(3) : '---';
+    return Container(
+      color: Colors.black.withValues(alpha: 0.8),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _monitorDiagRow('EAR',
+              'L:${_monitor.leftEar.toStringAsFixed(3)}  R:${_monitor.rightEar.toStringAsFixed(3)}  Thr:${_monitor.earThreshold.toStringAsFixed(3)}'),
+          _monitorDiagRow('HEAD',
+              'Yaw:${_monitor.yaw.toStringAsFixed(1)}°  Pitch:${_monitor.pitch.toStringAsFixed(1)}°'),
+          _monitorDiagRow('STATUS',
+              '${_monitor.drowsinessLevel.name.toUpperCase()} | ${_monitor.distractionStatus.name.toUpperCase()}'),
+        ],
+      ),
+    );
+  }
+
+  Widget _monitorDiagRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 56,
+            child: Text(
+              label,
+              style: GoogleFonts.poppins(
+                color: Colors.cyanAccent,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _expandedActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 12),
+              ],
+            ),
+            child: Icon(icon, color: Colors.white, size: 22),
+          ),
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              label,
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -558,7 +1280,6 @@ class DrivingHudView extends StatelessWidget {
       ),
     );
   }
-
 
   Widget _buildRouteCard(BuildContext context, TripDataModel data) {
     return Container(

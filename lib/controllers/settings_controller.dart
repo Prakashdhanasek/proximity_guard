@@ -56,6 +56,27 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Adds a new notification to the top of the notification center.
+  /// Used by the live driver-monitoring (drowsiness / distraction / banned
+  /// object) so detections appear alongside other notifications.
+  void addNotification({
+    required NotificationType type,
+    required String title,
+    required String message,
+  }) {
+    _notifications.insert(
+      0,
+      NotificationModel(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        type: type,
+        title: title,
+        message: message,
+        timestamp: DateTime.now(),
+      ),
+    );
+    notifyListeners();
+  }
+
   void markNotificationRead(String id) {
     final i = _notifications.indexWhere((n) => n.id == id);
     if (i != -1) {

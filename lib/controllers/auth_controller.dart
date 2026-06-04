@@ -34,25 +34,38 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Face Authentication (mock)
+  // ── Face Authentication (REAL camera) ──────────────────────────────────────
+  // CHANGED: This no longer fakes a success. It only opens the live face screen
+  // by putting auth into the "inProgress" state. The actual decision is driven
+  // by the on-device MobileFaceNet match inside FaceAuthView, which then calls
+  // completeFaceAuth() or failFaceAuth() below.
   Future<void> authenticateWithFace() async {
     _status = AuthStatus.inProgress;
     _currentMethod = AuthMethod.face;
-    _message = 'Scanning face...';
+    _message = 'Position your face in the frame';
     notifyListeners();
+  }
 
-    // Simulate face scanning delay
-    await Future.delayed(const Duration(seconds: 2));
-
-    // Simulate liveness check
-    _message = 'Liveness check...';
-    notifyListeners();
-    await Future.delayed(const Duration(seconds: 1));
-
-    // Mock success
+  /// Called by FaceAuthView when the live camera face matches an enrolled
+  /// reference face (MobileFaceNet L2 distance below threshold).
+  /// [driverName] is the matched reference person's name (e.g. 'Rohit'); when
+  /// null, the default mock name is kept.
+  void completeFaceAuth({String? driverName, String? driverId}) {
     _status = AuthStatus.success;
-    _authenticatedDriver = _mockDriver;
+    _currentMethod = AuthMethod.face;
+    _authenticatedDriver = _mockDriver.copyWith(
+      name: driverName ?? _mockDriver.name,
+      id: driverId ?? _mockDriver.id,
+    );
     _message = 'Face verified successfully';
+    notifyListeners();
+  }
+
+  /// Called by FaceAuthView when verification times out / fails.
+  void failFaceAuth([String message = 'Face not recognized. Please try again.']) {
+    _status = AuthStatus.failed;
+    _currentMethod = AuthMethod.face;
+    _message = message;
     notifyListeners();
   }
 

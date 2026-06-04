@@ -72,6 +72,20 @@ class TripController extends ChangeNotifier {
     }
   }
 
+  // ── REAL camera-driven alerts ──────────────────────────────────────────────
+  // DrivingHudView's on-device monitoring (drowsiness / distraction / banned
+  // object) calls this to push genuine alerts into the existing alert system.
+  // The same 10-second de-dup logic in _addAlert keeps it from spamming.
+  void pushCameraAlert({
+    required AlertType type,
+    required AlertSeverity severity,
+    required String title,
+    required String message,
+  }) {
+    if (!_isTripActive) return;
+    _addAlert(type: type, severity: severity, title: title, message: message);
+  }
+
   void _startSimulation() {
     // Update trip duration every second
     _durationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -137,7 +151,11 @@ class TripController extends ChangeNotifier {
   }
 
   void _generateRandomAlert() {
-    final types = [AlertType.drowsiness, AlertType.distraction, AlertType.geofenceBreach];
+    // CHANGED: drowsiness & distraction are now produced for REAL by the camera
+    // monitoring in DrivingHudView, so they are removed from the random
+    // simulation. Only the non-camera geofence event remains simulated.
+    // (To restore the old demo behaviour, add drowsiness/distraction back here.)
+    final types = [AlertType.geofenceBreach];
     final type = types[_random.nextInt(types.length)];
 
     switch (type) {
