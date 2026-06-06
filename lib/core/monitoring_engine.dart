@@ -25,6 +25,7 @@ class MonitoringEngine {
 
   final MonitorState state;
   int _noEyeFrames = 0;
+  int _sunglass_null_frames = 0;
 
   MonitoringEngine(this.state);
 
@@ -34,6 +35,21 @@ class MonitoringEngine {
     final now = DateTime.now();
 
     if (face == null) {
+      // If the face is lost but the head was heavily dropped/tilted back right before,
+      // the user might still be sleeping with their head severely tilted.
+      // Continue the sleep timer in the background!
+      if (state.headDropSince != null) {
+        final elapsed = now.difference(state.headDropSince!).inMilliseconds / 1000.0;
+        if (elapsed >= 5.0 && (state.drowsinessLevel != DrowsinessLevel.asleep || state.recentAlerts.where((a) => a.type == 'flag_sleeping').isEmpty)) {
+          state.drowsinessLevel = DrowsinessLevel.asleep;
+          state.addAlert(AlertEvent(
+            type: 'flag_sleeping',
+            message: 'FLAG: SEVERE DROWSINESS (Sleeping >= 5s)',
+            needsScreenshot: true,
+            isMajorFlag: true,
+          ));
+        }
+      }
       _handleNoFace(now);
       return;
     }
@@ -51,7 +67,9 @@ class MonitoringEngine {
   void _handleNoFace(DateTime now) {
     // If face disappears mid-session, pause drowsy timer
     state.eyesClosedSince = null;
-    state.drowsinessLevel = DrowsinessLevel.alert;
+    if (state.headDropSince == null) {
+      state.drowsinessLevel = DrowsinessLevel.alert;
+    }
     state.distractionStatus = DistractionStatus.forward;
     state.distractedSince = null;
   }
@@ -65,14 +83,14 @@ class MonitoringEngine {
     
     if (leftPts.isEmpty || rightPts.isEmpty) {
       _noEyeFrames++;
-      if (_noEyeFrames >= 20) {
-        // Auto-trigger sunglasses mode since eye landmarks are consistently missing
+      if (_noEyeFrames >= 40) {
+        // Only switch to sunglasses if CONSISTENTLY no eye landmarks for 40 frames (>1s)
         state.monitorMode = MonitorMode.sunglasses;
         state.earBaseline = 0.28;
         state.earThreshold = 0.21;
         state.calibrated = true;
         state.blinkBaselineStart = now;
-        print('[Monitoring] Sunglasses mode auto-detected during calibration (no eyes seen for 20 frames).');
+        print('[Monitoring] Sunglasses mode auto-detected during calibration (no eyes seen for 40 frames).');
       }
       return;
     }
@@ -134,19 +152,45 @@ class MonitoringEngine {
     if (yaw.abs() > kYawThreshold) {
       state.distractedSince ??= now;
       final elapsed = now.difference(state.distractedSince!).inMilliseconds / 1000.0;
-      if (elapsed >= kDistractionSeconds) {
+      if (elapsed >= kDistractionSeconds && state.distractionStatus != DistractionStatus.distracted) {
         state.distractionStatus = DistractionStatus.distracted;
+        state.totalDistractionCount++;
+        
+        if (state.totalDistractionCount == 5) {
+          state.addAlert(AlertEvent(
+            type: 'flag_distraction', 
+            message: 'FLAG: REPEATED DISTRACTED DRIVING (5+ times)',
+            needsScreenshot: true,
+            isMajorFlag: true,
+          ));
+        } else {
+          state.addAlert(AlertEvent(
+            type: 'distracted',
+            message: '⚠ DISTRACTION DETECTED (${state.totalDistractionCount}/5)',
+          ));
+        }
       }
     } else {
       state.distractedSince = null;
       state.distractionStatus = DistractionStatus.forward;
     }
 
-    // Head droop: pitch < -15° for 1.5s (Applies to ALL modes, not just sunglasses!)
-    if (pitch < kPitchThreshold) {
+    // Head droop/tilt back: pitch < -10° (forward) or pitch > 10.0° (backward) for 3s
+    if (pitch < kPitchThreshold || pitch > 10.0) {
       state.headDropSince ??= now;
       final elapsed = now.difference(state.headDropSince!).inMilliseconds / 1000.0;
-      if (elapsed >= kHeadDropSeconds) {
+      
+      if (elapsed >= 5.0) {
+        if (state.drowsinessLevel != DrowsinessLevel.asleep || state.recentAlerts.where((a) => a.type == 'flag_sleep_droop').isEmpty) {
+          state.drowsinessLevel = DrowsinessLevel.asleep;
+          state.addAlert(AlertEvent(
+            type: 'flag_sleep_droop', 
+            message: 'FLAG: SEVERE DROWSINESS (Head Drooping >= 5s)',
+            needsScreenshot: true,
+            isMajorFlag: true,
+          ));
+        }
+      } else if (elapsed >= kHeadDropSeconds) {
         state.drowsinessLevel = DrowsinessLevel.asleep; // Head droop is severe
         state.addAlert(AlertEvent(type: 'head_drop', message: 'WAKE UP – HEAD DROOPING!'));
       }
@@ -167,26 +211,72 @@ class MonitoringEngine {
     final leftPts = EarCalculator.extractLeftEyePoints(face);
     final rightPts = EarCalculator.extractRightEyePoints(face);
 
+    // ── Sunglasses Detection via Rolling Variance ─────────────────────────
+    // ML Kit 'fast' mode often hallucinates open eye landmarks over dark sunglasses.
+    // However, hallucinated eyes NEVER BLINK. We track the variance of EAR over time.
+    // If variance is near-zero for 60+ frames, the eyes are occluded (sunglasses).
+    
     double ear = 0.0;
     if (leftPts.isNotEmpty && rightPts.isNotEmpty) {
       final leftEar = EarCalculator.calculateEar(leftPts);
       final rightEar = EarCalculator.calculateEar(rightPts);
       state.leftEar = leftEar;
       state.rightEar = rightEar;
+      ear = (leftEar + rightEar) / 2.0;
+
+      // Track rolling EAR values (60 frames = 2 seconds at 30fps)
+      state.calibrationEarValues.add(ear);
+      if (state.calibrationEarValues.length > 60) {
+        state.calibrationEarValues.removeAt(0);
+      }
+
+      if (state.calibrationEarValues.length == 60) {
+        final avg = state.calibrationEarValues.reduce((a, b) => a + b) / 60;
+        final variance = state.calibrationEarValues.map((v) => pow(v - avg, 2)).reduce((a, b) => a + b) / 60;
+
+        if (variance < 0.0003 && avg > 0.15) { // Very still = hallucinated eyes over sunglasses
+          _sunglass_null_frames++;
+          if (_sunglass_null_frames > 10 && state.monitorMode != MonitorMode.sunglasses) {
+            state.monitorMode = MonitorMode.sunglasses;
+            print('[Monitoring] SUNGLASSES ON (zero variance detected)');
+          }
+        } else if (variance > 0.001) { // A blink happened = real open eyes, NOT sunglasses
+          _sunglass_null_frames = 0;
+          // Clear immediately so next detection cycle starts fresh — no lag
+          state.calibrationEarValues.clear();
+          if (state.monitorMode == MonitorMode.sunglasses) {
+            state.monitorMode = MonitorMode.normal;
+            print('[Monitoring] SUNGLASSES OFF (blink detected)');
+          }
+        }
+      }
+
+      if (state.monitorMode == MonitorMode.sunglasses) {
+        _processMar(face, now);
+        return; // EAR not used in sunglasses mode
+      }
 
       switch (state.monitorMode) {
         case MonitorMode.normal:
-          ear = (leftEar + rightEar) / 2.0;
           break;
         case MonitorMode.oneEye:
           ear = max(leftEar, rightEar);
           break;
-        case MonitorMode.sunglasses:
-          _processMar(face, now);
-          return; // EAR not used in sunglasses mode
+        default:
+          break;
       }
-
       _processDrowsinessEar(ear, now);
+    } else {
+      // If landmarks are completely lost, assume sunglasses if face is present
+      if (state.monitorMode != MonitorMode.sunglasses) {
+        _sunglass_null_frames++;
+        if (_sunglass_null_frames > 25) {
+          state.monitorMode = MonitorMode.sunglasses;
+          print('[Monitoring] SUNGLASSES ON (no eye landmarks found)');
+        }
+      } else {
+        _processMar(face, now);
+      }
     }
   }
 
@@ -200,15 +290,31 @@ class MonitoringEngine {
 
       final closedSecs = now.difference(state.eyesClosedSince!).inMilliseconds / 1000.0;
 
-      if (closedSecs >= kAsleepSeconds) {
-        if (state.drowsinessLevel != DrowsinessLevel.asleep) {
+      if (closedSecs >= 5.0) {
+        if (state.drowsinessLevel != DrowsinessLevel.asleep || state.recentAlerts.where((a) => a.type == 'flag_sleep').isEmpty) {
           state.drowsinessLevel = DrowsinessLevel.asleep;
-          state.addAlert(AlertEvent(type: 'asleep', message: 'ASLEEP AT THE WHEEL!'));
+          state.addAlert(AlertEvent(
+            type: 'flag_sleep', 
+            message: 'FLAG: SEVERE DROWSINESS (Sleeping >= 5s)',
+            needsScreenshot: true,
+            isMajorFlag: true,
+          ));
         }
       } else if (closedSecs >= kDrowsySeconds) {
         if (state.drowsinessLevel == DrowsinessLevel.alert) {
           state.drowsinessLevel = DrowsinessLevel.drowsy;
-          state.addAlert(AlertEvent(type: 'drowsy', message: 'DROWSINESS DETECTED!'));
+          state.totalDrowsyCount++;
+          
+          if (state.totalDrowsyCount > 3) {
+            state.addAlert(AlertEvent(
+              type: 'flag_repeated_drowsy',
+              message: 'FLAG: REPEATED DROWSINESS (>3 times)',
+              needsScreenshot: true,
+              isMajorFlag: true,
+            ));
+          } else {
+            state.addAlert(AlertEvent(type: 'drowsy', message: 'DROWSINESS DETECTED! (${state.totalDrowsyCount}/3)'));
+          }
         }
       }
     } else {
@@ -286,7 +392,12 @@ class MonitoringEngine {
       final secs = now.difference(state.impairmentFlaggedSince!).inMilliseconds / 1000.0;
       if (secs >= kImpairmentTriggerSeconds && !state.impairmentFlag) {
         state.impairmentFlag = true;
-        state.addAlert(AlertEvent(type: 'impairment', message: 'POSSIBLE IMPAIRMENT – REVIEW REQUIRED'));
+        state.addAlert(AlertEvent(
+          type: 'flag_substance', 
+          message: 'FLAG: SUSPECTED IMPAIRMENT (Deviated from Baseline)',
+          needsScreenshot: true,
+          isMajorFlag: true,
+        ));
       }
     } else {
       state.impairmentFlaggedSince = null;

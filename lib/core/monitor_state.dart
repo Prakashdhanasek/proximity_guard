@@ -10,16 +10,26 @@ class AlertEvent {
   final String type;
   final String message;
   final DateTime timestamp;
-  AlertEvent({required this.type, required this.message})
-      : timestamp = DateTime.now();
+  final bool needsScreenshot;
+  final bool isMajorFlag;
+  String? screenshotPath;
+
+  AlertEvent({
+    required this.type,
+    required this.message,
+    this.needsScreenshot = false,
+    this.isMajorFlag = false,
+  }) : timestamp = DateTime.now();
 }
 
 class MonitorState {
   // Auth
   AuthStatus authStatus = AuthStatus.scanning;
   double authDistance = -1.0;  // live distance score — shown in diag for threshold tuning
+  int? authenticatedTrackingId; // Maintain auth if MLKit tracking confirms it's the same physical face
   int faceCount = 0;           // number of faces seen in current frame
   bool seatbeltBuckled = false;
+  DateTime? lastSeatbeltDetected;
 
   // Calibration
   bool calibrated = false;
@@ -40,6 +50,7 @@ class MonitorState {
   DateTime? eyesClosedSince;
   DateTime? eyesOpenSince;
   DrowsinessLevel drowsinessLevel = DrowsinessLevel.alert;
+  int totalDrowsyCount = 0;
 
   // MAR (sunglasses mode)
   double mar = 0.0;
@@ -54,6 +65,7 @@ class MonitorState {
 
   // Blink tracking
   List<DateTime> blinkTimestamps = [];
+  List<double> recentEarHistory = []; // For rolling variance / sunglasses detection
   double blinkBaseline = 0.0;
   bool blinkBaselineSet = false;
   DateTime? blinkBaselineStart;
@@ -62,6 +74,15 @@ class MonitorState {
   DateTime? impairmentFlaggedSince;
   DateTime? impairmentSuppressedUntil;
   bool lastEyeStateOpen = true;
+
+  // Driver historical baseline (Substance Abuse Tracker)
+  double headSwayBaseline = 0.0;
+  List<double> headPitchHistory = [];
+  List<double> headYawHistory = [];
+
+  // Distraction tracking
+  int totalDistractionCount = 0;
+  DateTime? lastDistractionFlagTime;
 
   // Object detection
   List<DetectedObject> detectedObjects = [];
@@ -93,12 +114,19 @@ class MonitorState {
     impairmentFlag = false;
     impairmentFlaggedSince = null;
     drowsinessLevel = DrowsinessLevel.alert;
+    totalDrowsyCount = 0;
     distractionStatus = DistractionStatus.forward;
     eyesClosedSince = null;
     eyesOpenSince = null;
     distractedSince = null;
     headDropSince = null;
     seatbeltBuckled = false;
+    totalDistractionCount = 0;
+    lastDistractionFlagTime = null;
+    headSwayBaseline = 0.0;
+    headPitchHistory.clear();
+    headYawHistory.clear();
+    recentEarHistory.clear();
   }
 }
 
