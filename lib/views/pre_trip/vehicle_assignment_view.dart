@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/vehicle_controller.dart';
 import '../../controllers/pre_trip_controller.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_assets.dart';
 
 class VehicleAssignmentView extends StatefulWidget {
   const VehicleAssignmentView({super.key});
@@ -13,6 +15,12 @@ class VehicleAssignmentView extends StatefulWidget {
 }
 
 class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
+  // Palette (matches the mock)
+  static const Color _textDark = Color(0xFF1B2335);
+  static const Color _textGrey = Color(0xFF8A93A6);
+  static const Color _cardBorder = Color(0xFFEDEFF4);
+  static const Color _plateBorder = Color(0xFFDDE2EC);
+
   @override
   void initState() {
     super.initState();
@@ -30,9 +38,13 @@ class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2.5),
-                SizedBox(height: 16),
-                Text(AppLocalizations.of(context).loadingVehicle, style: TextStyle(color: AppTheme.of(context).textSecondary)),
+                const CircularProgressIndicator(
+                    color: AppTheme.primary, strokeWidth: 2.5),
+                const SizedBox(height: 16),
+                Text(
+                  AppLocalizations.of(context).loadingVehicle,
+                  style: GoogleFonts.poppins(color: _textGrey),
+                ),
               ],
             ),
           );
@@ -41,33 +53,39 @@ class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
         final vehicle = vehicleController.assignedVehicle;
         if (vehicle == null) {
           return Center(
-            child: Text(AppLocalizations.of(context).noVehicleAssigned, style: TextStyle(color: AppTheme.of(context).textSecondary)),
+            child: Text(
+              AppLocalizations.of(context).noVehicleAssigned,
+              style: GoogleFonts.poppins(color: _textGrey),
+            ),
           );
         }
 
         return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 AppLocalizations.of(context).yourVehicle,
-                style: TextStyle(color: AppTheme.of(context).textPrimary, fontSize: 24, fontWeight: FontWeight.w700),
+                style: GoogleFonts.poppins(
+                  color: _textDark,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
                 AppLocalizations.of(context).confirmVehicle,
-                style: TextStyle(color: AppTheme.of(context).textSecondary, fontSize: 14),
+                style: GoogleFonts.poppins(color: _textGrey, fontSize: 14),
               ),
-              const SizedBox(height: 24),
-              _buildVehicleCard(vehicle),
               const SizedBox(height: 20),
-              _buildQuickInfo(vehicle),
+              _buildVehicleCard(vehicle),
               const Spacer(),
               AppTheme.gradientButton(
                 label: AppLocalizations.of(context).confirmContinue,
-                icon: Icons.check_rounded,
-                onPressed: () => context.read<PreTripController>().onVehicleConfirmed(),
+                icon: Icons.arrow_forward_rounded,
+                onPressed: () =>
+                    context.read<PreTripController>().onVehicleConfirmed(),
               ),
             ],
           ),
@@ -78,124 +96,168 @@ class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
 
   Widget _buildVehicleCard(dynamic vehicle) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppTheme.of(context).card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
-        boxShadow: [
-          BoxShadow(color: AppTheme.primary.withValues(alpha: 0.05), blurRadius: 20, spreadRadius: 2),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _cardBorder, width: 1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
         ],
       ),
       child: Column(
         children: [
+          // ── Header row ──
           Row(
             children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  gradient: AppTheme.primaryGradient,
-                  borderRadius: BorderRadius.circular(14),
+              Text(
+                'Your Assigned Vehicle',
+                style: GoogleFonts.poppins(
+                  color: _textDark,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
                 ),
-                child: const Icon(Icons.directions_car_rounded, color: Colors.white, size: 26),
               ),
-              const SizedBox(width: 14),
+              const Spacer(),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppTheme.success.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  'Today',
+                  style: GoogleFonts.poppins(
+                    color: AppTheme.success,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // ── Image + details ──
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Image.asset(
+                AppImages.vehicle,
+                width: 112,
+                height: 80,
+                fit: BoxFit.contain,
+              ),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       '${vehicle.make} ${vehicle.model}',
-                      style: TextStyle(
-                        color: AppTheme.of(context).textPrimary,
-                        fontSize: 18,
+                      style: GoogleFonts.poppins(
+                        color: _textDark,
+                        fontSize: 17,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 2),
                     Text(
-                      'Year ${vehicle.year}',
-                      style: TextStyle(color: AppTheme.of(context).textSecondary, fontSize: 13),
+                      'Year: ${vehicle.year}',
+                      style: GoogleFonts.poppins(
+                        color: _textGrey,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // Number plate
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: _plateBorder, width: 1.2),
+                      ),
+                      child: Text(
+                        vehicle.registrationNumber,
+                        style: GoogleFonts.poppins(
+                          color: _textDark,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppTheme.accent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3)),
-                ),
-                child: const Text(
-                  'ACTIVE',
-                  style: TextStyle(color: AppTheme.accent, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.8),
-                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          Divider(color: _cardBorder, height: 1, thickness: 1),
+          const SizedBox(height: 14),
+
+          // ── Fleet / Vehicle ID / Status ──
+          Row(
+            children: [
+              _infoCol(
+                Icons.local_shipping_outlined,
+                'Fleet',
+                vehicle.fleetId,
+              ),
+              _vDivider(),
+              _infoCol(
+                Icons.description_outlined,
+                'Vehicle ID',
+                vehicle.id,
+              ),
+              _vDivider(),
+              _infoCol(
+                Icons.speed_outlined,
+                'Status',
+                'Ready',
+                valueColor: AppTheme.success,
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppTheme.of(context).surface,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.confirmation_number_outlined, size: 16, color: AppTheme.of(context).textMuted),
-                const SizedBox(width: 8),
-                Text(
-                  vehicle.registrationNumber,
-                  style: TextStyle(
-                    color: AppTheme.of(context).textPrimary,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildQuickInfo(dynamic vehicle) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.of(context).card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.of(context).cardBorder),
-      ),
-      child: Row(
-        children: [
-          _buildInfoChip(Icons.group_work_outlined, 'Fleet', vehicle.fleetId),
-          Container(width: 1, height: 32, color: AppTheme.of(context).cardBorder),
-          _buildInfoChip(Icons.badge_outlined, 'ID', vehicle.id),
-          Container(width: 1, height: 32, color: AppTheme.of(context).cardBorder),
-          _buildInfoChip(Icons.speed_rounded, 'Status', 'Ready'),
-        ],
-      ),
-    );
-  }
+  Widget _vDivider() => Container(width: 1, height: 38, color: _cardBorder);
 
-  Widget _buildInfoChip(IconData icon, String label, String value) {
+  Widget _infoCol(
+    IconData icon,
+    String label,
+    String value, {
+    Color? valueColor,
+  }) {
     return Expanded(
       child: Column(
         children: [
-          Icon(icon, size: 18, color: AppTheme.of(context).textMuted),
+          Icon(icon, size: 20, color: _textGrey),
           const SizedBox(height: 6),
-          Text(label, style: TextStyle(color: AppTheme.of(context).textMuted, fontSize: 10, fontWeight: FontWeight.w500)),
+          Text(
+            label,
+            style: GoogleFonts.poppins(color: _textGrey, fontSize: 11),
+          ),
           const SizedBox(height: 2),
           Text(
             value,
-            style: TextStyle(color: AppTheme.of(context).textPrimary, fontSize: 12, fontWeight: FontWeight.w600),
             overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.poppins(
+              color: valueColor ?? _textDark,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),

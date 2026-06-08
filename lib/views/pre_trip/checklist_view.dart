@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/checklist_controller.dart';
 import '../../controllers/pre_trip_controller.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_assets.dart';
 
 class ChecklistView extends StatefulWidget {
   const ChecklistView({super.key});
@@ -14,6 +16,13 @@ class ChecklistView extends StatefulWidget {
 
 class _ChecklistViewState extends State<ChecklistView> {
   final ScrollController _scrollController = ScrollController();
+  bool _showCompleted = true;
+
+  // Palette (matches the mock)
+  static const Color _textDark = Color(0xFF1B2335);
+  static const Color _textGrey = Color(0xFF8A93A6);
+  static const Color _cardBorder = Color(0xFFEDEFF4);
+  static const Color _trackGrey = Color(0xFFE6E9F1);
 
   @override
   void initState() {
@@ -31,11 +40,11 @@ class _ChecklistViewState extends State<ChecklistView> {
 
   void _onItemTapped(ChecklistController controller, String id) {
     controller.toggleItem(id);
-    // Find the next unchecked item and scroll to it
     final items = controller.items;
     final nextIndex = items.indexWhere((item) => !item.isCompleted);
-    if (nextIndex != -1) {
-      final targetOffset = (nextIndex * 78.0).clamp(0.0, _scrollController.position.maxScrollExtent);
+    if (nextIndex != -1 && _scrollController.hasClients) {
+      final targetOffset = (nextIndex * 84.0)
+          .clamp(0.0, _scrollController.position.maxScrollExtent);
       _scrollController.animateTo(
         targetOffset,
         duration: const Duration(milliseconds: 350),
@@ -44,44 +53,117 @@ class _ChecklistViewState extends State<ChecklistView> {
     }
   }
 
+  /// Maps an item to its asset icon by matching keywords in the title.
+  String? _iconAssetFor(String title) {
+    final t = title.toLowerCase();
+    if (t.contains('light') || t.contains('indicator')) return AppImages.light;
+    if (t.contains('wiper') || t.contains('mirror')) return AppImages.wiper;
+    if (t.contains('fuel') || t.contains('charge')) return AppImages.fuel;
+    if (t.contains('seat') || t.contains('belt') || t.contains('cabin')) {
+      return AppImages.seatbelt;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<ChecklistController>(
       builder: (context, checklistController, _) {
+        final allItems = checklistController.items;
+        final displayed = _showCompleted
+            ? allItems
+            : allItems.where((i) => !i.isCompleted).toList();
+
         return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 AppLocalizations.of(context).preTripInspection,
-                style: TextStyle(color: AppTheme.of(context).textPrimary, fontSize: 24, fontWeight: FontWeight.w700),
+                style: GoogleFonts.poppins(
+                  color: _textDark,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
-                AppLocalizations.of(context).tapEachItem,
-                style: TextStyle(color: AppTheme.of(context).textSecondary, fontSize: 14),
+                'Check each item before starting your trip',
+                style: GoogleFonts.poppins(color: _textGrey, fontSize: 14),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
+
               _buildProgressCard(checklistController),
               const SizedBox(height: 18),
+
+              // Section header + collapse toggle
+              Row(
+                children: [
+                  Text(
+                    'Inspection Checklist',
+                    style: GoogleFonts.poppins(
+                      color: _textDark,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () =>
+                        setState(() => _showCompleted = !_showCompleted),
+                    behavior: HitTestBehavior.opaque,
+                    child: Row(
+                      children: [
+                        Text(
+                          _showCompleted
+                              ? 'Collapse Completed'
+                              : 'Show Completed',
+                          style: GoogleFonts.poppins(
+                            color: AppTheme.primary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        Icon(
+                          _showCompleted
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          color: AppTheme.primary,
+                          size: 20,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
               Expanded(
                 child: ListView.separated(
                   controller: _scrollController,
-                  itemCount: checklistController.items.length,
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: displayed.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
-                    final item = checklistController.items[index];
-                    return _buildChecklistItem(item: item, onTap: () => _onItemTapped(checklistController, item.id));
+                    final item = displayed[index];
+                    return _buildChecklistItem(
+                      item: item,
+                      onTap: () =>
+                          _onItemTapped(checklistController, item.id),
+                    );
                   },
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
+
               AppTheme.gradientButton(
                 label: AppLocalizations.of(context).completeInspection,
-                icon: checklistController.isCompleted ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
+                icon: Icons.arrow_forward_rounded,
                 onPressed: checklistController.isCompleted
-                    ? () => context.read<PreTripController>().onChecklistCompleted()
+                    ? () =>
+                        context.read<PreTripController>().onChecklistCompleted()
                     : null,
               ),
             ],
@@ -92,56 +174,58 @@ class _ChecklistViewState extends State<ChecklistView> {
   }
 
   Widget _buildProgressCard(ChecklistController controller) {
+    final pct = (controller.progress * 100).toInt();
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.of(context).card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.of(context).cardBorder),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _cardBorder, width: 1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 44,
-            height: 44,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                CircularProgressIndicator(
-                  value: controller.progress,
-                  strokeWidth: 4,
-                  color: AppTheme.success,
-                  backgroundColor: AppTheme.of(context).cardBorder,
-                ),
-                Text(
-                  '${(controller.progress * 100).toInt()}%',
-                  style: TextStyle(
-                    color: AppTheme.of(context).textPrimary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
+          Text(
+            'Progress',
+            style: GoogleFonts.poppins(
+              color: _textDark,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${controller.completedCount} of ${controller.totalCount} ${AppLocalizations.of(context).itemsChecked}',
-                  style: TextStyle(color: AppTheme.of(context).textPrimary, fontSize: 14, fontWeight: FontWeight.w500),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Text(
+                '${controller.completedCount} of ${controller.totalCount} checks completed',
+                style: GoogleFonts.poppins(color: _textGrey, fontSize: 13),
+              ),
+              const Spacer(),
+              Text(
+                '$pct%',
+                style: GoogleFonts.poppins(
+                  color: _textDark,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  controller.isCompleted ? AppLocalizations.of(context).allClear : AppLocalizations.of(context).keepGoing,
-                  style: TextStyle(
-                    color: controller.isCompleted ? AppTheme.success : AppTheme.of(context).textMuted,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: controller.progress,
+              minHeight: 7,
+              backgroundColor: _trackGrey,
+              valueColor: const AlwaysStoppedAnimation(AppTheme.primary),
             ),
           ),
         ],
@@ -149,7 +233,13 @@ class _ChecklistViewState extends State<ChecklistView> {
     );
   }
 
-  Widget _buildChecklistItem({required dynamic item, required VoidCallback onTap}) {
+  Widget _buildChecklistItem({
+    required dynamic item,
+    required VoidCallback onTap,
+  }) {
+    final bool done = item.isCompleted;
+    final String? iconAsset = _iconAssetFor(item.title);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -157,57 +247,83 @@ class _ChecklistViewState extends State<ChecklistView> {
         borderRadius: BorderRadius.circular(14),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: item.isCompleted ? AppTheme.success.withValues(alpha: 0.05) : AppTheme.of(context).card,
+            color: done ? AppTheme.success.withValues(alpha: 0.06) : Colors.white,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: item.isCompleted ? AppTheme.success.withValues(alpha: 0.3) : AppTheme.of(context).cardBorder,
+              color: done
+                  ? AppTheme.success.withValues(alpha: 0.25)
+                  : _cardBorder,
+              width: 1,
             ),
           ),
           child: Row(
             children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: 26,
-                height: 26,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: item.isCompleted ? AppTheme.successGradient : null,
-                  color: item.isCompleted ? null : Colors.transparent,
-                  border: item.isCompleted
-                      ? null
-                      : Border.all(color: AppTheme.of(context).cardBorder, width: 2),
+              // Leading icon (asset has its own coloured square; fallback box)
+              if (iconAsset != null)
+                Image.asset(iconAsset, width: 46, height: 46, fit: BoxFit.contain)
+              else
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.fact_check_outlined,
+                      color: AppTheme.primary, size: 22),
                 ),
-                child: item.isCompleted
-                    ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
-                    : null,
-              ),
               const SizedBox(width: 14),
+
+              // Title + description
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       item.title,
-                      style: TextStyle(
-                        color: item.isCompleted ? AppTheme.of(context).textSecondary : AppTheme.of(context).textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        decoration: item.isCompleted ? TextDecoration.lineThrough : null,
-                        decorationColor: AppTheme.of(context).textMuted,
+                      style: GoogleFonts.poppins(
+                        color: _textDark,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    if (item.description.isNotEmpty && !item.isCompleted) ...[
-                      const SizedBox(height: 3),
+                    if ((item.description as String).isNotEmpty) ...[
+                      const SizedBox(height: 2),
                       Text(
                         item.description,
-                        style: TextStyle(color: AppTheme.of(context).textMuted, fontSize: 12),
+                        style: GoogleFonts.poppins(
+                          color: _textGrey,
+                          fontSize: 12.5,
+                        ),
                       ),
                     ],
                   ],
                 ),
               ),
+              const SizedBox(width: 10),
+
+              // Trailing check indicator
+              done
+                  ? Container(
+                      width: 28,
+                      height: 28,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: AppTheme.successGradient,
+                      ),
+                      child: const Icon(Icons.check_rounded,
+                          size: 17, color: Colors.white),
+                    )
+                  : Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: _trackGrey, width: 1.6),
+                      ),
+                    ),
             ],
           ),
         ),

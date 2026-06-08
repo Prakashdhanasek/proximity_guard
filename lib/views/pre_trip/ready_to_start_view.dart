@@ -1,124 +1,221 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:avatar_glow/avatar_glow.dart';
 import '../../controllers/auth_controller.dart';
+import '../../controllers/vehicle_controller.dart';
 import '../../controllers/pre_trip_controller.dart';
 import '../../controllers/trip_controller.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_assets.dart';
 import '../during_trip/driving_hud_view.dart';
 
 class ReadyToStartView extends StatelessWidget {
   const ReadyToStartView({super.key});
 
+  // Palette (matches the mock)
+  static const Color _textDark = Color(0xFF1B2335);
+  static const Color _textGrey = Color(0xFF8A93A6);
+  static const Color _cardBorder = Color(0xFFEDEFF4);
+
   @override
   Widget build(BuildContext context) {
     final driver = context.read<AuthController>().authenticatedDriver;
+    final vehicle = context.read<VehicleController>().assignedVehicle;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
       child: Column(
         children: [
-          const SizedBox(height: 20),
-          // Hero visual
-          AvatarGlow(
-            glowColor: AppTheme.primary,
-            glowRadiusFactor: 0.25,
-            animate: true,
-            child: Container(
-              width: 100,
-              height: 100,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: AppTheme.primaryGradient,
-              ),
-              child: const Icon(Icons.power_settings_new_rounded, size: 48, color: Colors.white),
-            ),
-          ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 8),
+          _buildHero(),
+          const SizedBox(height: 22),
           Text(
             AppLocalizations.of(context).readyToDrive,
-            style: const TextStyle(
-              color: AppTheme.accent,
-              fontSize: 28,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
+            style: GoogleFonts.poppins(
+              color: AppTheme.primary,
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
-            AppLocalizations.of(context).allVerificationsPassed,
-            style: TextStyle(color: AppTheme.of(context).textSecondary, fontSize: 14),
+            'All verification completed successfully',
             textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(color: _textGrey, fontSize: 14),
           ),
-          const SizedBox(height: 28),
-          _buildSummaryCard(context, driver),
-          const SizedBox(height: 32),
-          // Start button
+          const SizedBox(height: 24),
+          _buildSummaryCard(context, driver, vehicle),
+          const SizedBox(height: 26),
+
           AppTheme.gradientButton(
             label: AppLocalizations.of(context).startVehicle,
             icon: Icons.power_settings_new_rounded,
             onPressed: () => _showStartConfirmation(context),
             height: 58,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           TextButton(
             onPressed: () {
               context.read<PreTripController>().reset();
               context.read<AuthController>().reset();
             },
-            child: Text(AppLocalizations.of(context).cancelReset, style: TextStyle(color: AppTheme.of(context).textMuted, fontSize: 13)),
+            child: Text(
+              AppLocalizations.of(context).cancelReset,
+              style: GoogleFonts.poppins(
+                color: AppTheme.primary,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryCard(BuildContext context, dynamic driver) {
+  // Truck inside a soft circle with a green check badge.
+  Widget _buildHero() {
+    return SizedBox(
+      width: 168,
+      height: 160,
+      child: Stack(
+        children: [
+          Center(
+            child: Container(
+              width: 150,
+              height: 150,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.primary.withValues(alpha: 0.04),
+                border: Border.all(
+                  color: AppTheme.primary.withValues(alpha: 0.15),
+                  width: 1.5,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Image.asset(AppImages.vehicle, fit: BoxFit.contain),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 6,
+            bottom: 28,
+            child: Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: AppTheme.successGradient,
+                border: Border.all(color: Colors.white, width: 3),
+              ),
+              child: const Icon(Icons.check_rounded,
+                  size: 20, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard(
+      BuildContext context, dynamic driver, dynamic vehicle) {
+    final String vehicleText = vehicle != null
+        ? '${vehicle.make} ${vehicle.model} , ${vehicle.registrationNumber}'
+        : '—';
+
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.of(context).card,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.of(context).cardBorder),
+        border: Border.all(color: _cardBorder, width: 1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         children: [
-          _buildRow(context, Icons.person_rounded, AppLocalizations.of(context).driver, driver?.name ?? 'Unknown'),
-          _buildDivider(context),
-          _buildRow(context, Icons.verified_rounded, AppLocalizations.of(context).identity, AppLocalizations.of(context).verified),
-          _buildDivider(context),
-          _buildRow(context, Icons.checklist_rounded, AppLocalizations.of(context).inspection, AppLocalizations.of(context).passed),
-          _buildDivider(context),
-          _buildRow(context, Icons.schedule_rounded, AppLocalizations.of(context).time, _currentTime()),
+          _buildRow(
+            AppImages.driver,
+            AppLocalizations.of(context).driver,
+            driver?.name ?? 'Unknown',
+          ),
+          _divider(),
+          _buildRow(
+            AppImages.vehicleIcon,
+            AppLocalizations.of(context).vehicle,
+            vehicleText,
+          ),
+          _divider(),
+          _buildRow(
+            AppImages.inspectionIcon,
+            AppLocalizations.of(context).inspection,
+            AppLocalizations.of(context).passed,
+          ),
+          _divider(),
+          _buildRow(
+            AppImages.time,
+            AppLocalizations.of(context).time,
+            _currentDateTime(),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildRow(BuildContext context, IconData icon, String label, String value) {
+  Widget _buildRow(String iconAsset, String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: AppTheme.accent),
-          const SizedBox(width: 12),
-          Text(label, style: TextStyle(color: AppTheme.of(context).textSecondary, fontSize: 13)),
-          const Spacer(),
-          Text(value, style: TextStyle(color: AppTheme.of(context).textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+          Image.asset(iconAsset, width: 40, height: 40, fit: BoxFit.contain),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: GoogleFonts.poppins(color: _textGrey, fontSize: 12),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: GoogleFonts.poppins(
+                    color: _textDark,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildDivider(BuildContext context) => Divider(color: AppTheme.of(context).cardBorder, height: 1);
+  Widget _divider() => Divider(color: _cardBorder, height: 1, thickness: 1);
 
-  String _currentTime() {
+  String _currentDateTime() {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
     final now = DateTime.now();
-    final hour = now.hour > 12 ? now.hour - 12 : now.hour;
-    final period = now.hour >= 12 ? 'PM' : 'AM';
-    return '${hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} $period';
+    final h = now.hour % 12 == 0 ? 12 : now.hour % 12;
+    final period = now.hour >= 12 ? 'pm' : 'am';
+    final time =
+        '${h.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} $period';
+    return '$time . ${now.day} ${months[now.month - 1]} ${now.year}';
   }
 
   void _showStartConfirmation(BuildContext context) {
@@ -140,17 +237,22 @@ class ReadyToStartView extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: AppTheme.accent.withValues(alpha: 0.1),
                 ),
-                child: const Icon(Icons.check_circle_rounded, size: 40, color: AppTheme.accent),
+                child: const Icon(Icons.check_circle_rounded,
+                    size: 40, color: AppTheme.accent),
               ),
               const SizedBox(height: 20),
               Text(
                 AppLocalizations.of(context).vehicleAuthorized,
-                style: TextStyle(color: AppTheme.of(context).textPrimary, fontSize: 20, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                    color: AppTheme.of(context).textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
               Text(
                 AppLocalizations.of(context).driveStarted,
-                style: TextStyle(color: AppTheme.of(context).textSecondary, fontSize: 14),
+                style: TextStyle(
+                    color: AppTheme.of(context).textSecondary, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),

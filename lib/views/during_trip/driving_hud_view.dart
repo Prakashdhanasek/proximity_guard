@@ -19,6 +19,7 @@ import '../../core/monitor_state.dart' as sd;
 import '../../core/monitoring_engine.dart';
 import '../../core/object_detector_engine.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_assets.dart';
 import '../general/settings_hub_view.dart';
 import '../post_trip/post_trip_summary_view.dart';
 import 'trip_alert_overlay.dart';
@@ -55,6 +56,11 @@ class _DrivingHudViewState extends State<DrivingHudView> {
   sd.DrowsinessLevel _lastDrowsy = sd.DrowsinessLevel.alert;
   sd.DistractionStatus _lastDistract = sd.DistractionStatus.forward;
 
+  // Palette (light design)
+  static const Color _textDark = Color(0xFF1B2335);
+  static const Color _textGrey = Color(0xFF8A93A6);
+  static const Color _cardBorder = Color(0xFFEDEFF4);
+
   @override
   void initState() {
     super.initState();
@@ -71,14 +77,12 @@ class _DrivingHudViewState extends State<DrivingHudView> {
   }
 
   Future<void> _initMonitoring() async {
-    // Object detector (YOLOv8n). Safe to await even if model is missing.
     try {
       await _objectDetector.initialize();
     } catch (_) {}
 
     if (!mounted) return;
 
-    // Live face detector WITH contours + landmarks (needed for EAR / head pose).
     _detector = FaceDetector(
       options: FaceDetectorOptions(
         enableContours: true,
@@ -119,9 +123,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
       setState(() => _camReady = true);
       await controller.startImageStream(_processImage);
       _streaming = true;
-    } catch (_) {
-      // monitoring simply stays off if the camera can't start
-    }
+    } catch (_) {}
   }
 
   Future<void> _processImage(CameraImage image) async {
@@ -149,7 +151,6 @@ class _DrivingHudViewState extends State<DrivingHudView> {
 
       _pushDrowsinessAndDistraction();
 
-      // Object detection every 30 frames.
       if (_frameIndex % 30 == 0) {
         _objectDetector.processFrame(
           image,
@@ -159,20 +160,14 @@ class _DrivingHudViewState extends State<DrivingHudView> {
         _pushBannedObjects();
       }
 
-      // Audio alarm (same behaviour as SafeDrive).
       _handleAlarms();
     } catch (_) {
-      // ignore transient frame errors
     } finally {
       _isProcessing = false;
-      // Live-refresh the SafeDrive-style overlay while the camera is expanded.
       if (_cameraExpanded && mounted) setState(() {});
     }
   }
 
-  // Plays alert sounds the same way SafeDrive does:
-  //  - loud alarm when asleep (throttled 1.5s)
-  //  - soft alarm for drowsy / distracted / banned object (throttled 3s)
   void _handleAlarms() {
     final now = DateTime.now();
     final msSinceLast = now.difference(_lastAlarmTime).inMilliseconds;
@@ -195,8 +190,6 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     }
   }
 
-  // Pushes a notification into the app's notification center (throttled per key
-  // so the same event doesn't spam while it persists).
   void _notify(String key, String title, String message) {
     final settings = _settings;
     if (settings == null) return;
@@ -215,7 +208,6 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     final trip = _trip;
     if (trip == null) return;
 
-    // Drowsiness — only on level change, and only when not "alert".
     if (_monitor.drowsinessLevel != _lastDrowsy) {
       _lastDrowsy = _monitor.drowsinessLevel;
       if (_monitor.drowsinessLevel == sd.DrowsinessLevel.asleep) {
@@ -239,7 +231,6 @@ class _DrivingHudViewState extends State<DrivingHudView> {
       }
     }
 
-    // Distraction (head turned away too long).
     if (_monitor.distractionStatus != _lastDistract) {
       _lastDistract = _monitor.distractionStatus;
       if (_monitor.distractionStatus == sd.DistractionStatus.distracted) {
@@ -324,9 +315,6 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     if (rotation == null) return null;
 
     if (Platform.isAndroid) {
-      // Proper NV21 packing (respects row/pixel stride). The naive
-      // plane-concatenation breaks on devices where rowStride != width,
-      // which makes ML Kit detect zero faces.
       final nv21 = _yuv420ToNv21(image);
       return InputImage.fromBytes(
         bytes: nv21,
@@ -350,8 +338,6 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     }
   }
 
-  /// YUV_420_888 (3 planes) -> packed NV21 (Y followed by interleaved V,U),
-  /// correctly handling row stride and pixel stride.
   Uint8List _yuv420ToNv21(CameraImage image) {
     final int width = image.width;
     final int height = image.height;
@@ -408,75 +394,64 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     super.dispose();
   }
 
-  // ─── UI (original DrivingHudView build, with a monitor preview overlay) ──────
+  // ─── UI (new light design) ──────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Consumer<TripController>(
       builder: (context, tripController, _) {
         final data = tripController.tripData;
-        final isMinimal = tripController.drivingMode == DrivingMode.minimal;
-        final size = MediaQuery.of(context).size;
-
-        final isDark = Theme.of(context).brightness == Brightness.dark;
 
         return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+          value: SystemUiOverlayStyle.light,
           child: Scaffold(
+            backgroundColor: Colors.white,
             body: Stack(
               children: [
-                // Full background with painted decorations
-                SizedBox.expand(
-                  child: CustomPaint(
-                    painter: _BackgroundPainter(isOverSpeed: data.isOverSpeed, isDark: isDark),
-                  ),
-                ),
-
-                // Decorative floating shapes
-                ..._buildFloatingShapes(size),
-
-                // ── HUD (hidden while the camera is expanded) ──
-                if (!_cameraExpanded)
-                  SafeArea(
-                  child: Column(
-                    children: [
-                      if (!isMinimal) _buildHeader(context, tripController),
-                      if (!isMinimal) const SizedBox(height: 4),
-                      if (isMinimal) const Spacer(flex: 2),
-                      _buildSpeedSection(context, data),
-                      if (!isMinimal) ...[
-                        const SizedBox(height: 10),
-                        Expanded(
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                            child: Column(
-                              children: [
-                                _buildDistanceCard(context, data),
-                                const SizedBox(height: 12),
-                                LiveRouteMap(
-                                  progress: data.routeProgress,
-                                  routeName: data.routeName,
-                                  isLive: true,
-                                  inGeofence: data.isInGeofence,
-                                  speedKmh: data.currentSpeed,
-                                ),
-                                const SizedBox(height: 12),
-                                _buildRouteCard(context, data),
-                                const SizedBox(height: 12),
-                                _buildTripStats(context, data),
-                                const SizedBox(height: 8),
-                              ],
-                            ),
-                          ),
+                Column(
+                  children: [
+                    _buildHeader(context, tripController),
+                    Expanded(
+                      child: Container(
+                        width: double.infinity,
+                        transform: Matrix4.translationValues(0, -22, 0),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          borderRadius:
+                              BorderRadius.vertical(top: Radius.circular(24)),
                         ),
-                      ],
-                      if (isMinimal) const Spacer(flex: 3),
-                      _buildBottomBar(context, tripController),
-                    ],
-                  ),
+                        clipBehavior: Clip.antiAlias,
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: SingleChildScrollView(
+                                physics: const BouncingScrollPhysics(),
+                                padding:
+                                    const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                                child: Column(
+                                  children: [
+                                    _buildSpeedCard(context, data),
+                                    const SizedBox(height: 14),
+                                    _buildDistanceCard(context, data),
+                                    const SizedBox(height: 14),
+                                    _buildLiveTracking(context, data),
+                                    const SizedBox(height: 14),
+                                    _buildStatsRow(context, data),
+                                    const SizedBox(height: 14),
+                                    _buildActionButtons(context, tripController),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            _buildBottomNav(context, tripController),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
 
-                // ── Camera: small preview OR full-screen (tap to toggle) ──
+                // ── Monitoring camera: always-visible thumbnail / full-screen ──
                 if (_camReady && _camera != null) ...[
                   if (_cameraExpanded)
                     Positioned.fill(
@@ -487,8 +462,8 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                     )
                   else
                     Positioned(
-                      left: 16,
-                      bottom: 92,
+                      right: 14,
+                      bottom: 180,
                       child: GestureDetector(
                         onTap: () => setState(() => _cameraExpanded = true),
                         child: _buildMonitorPreview(),
@@ -496,7 +471,6 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                     ),
                 ],
 
-                // ── Minimize + End controls (center-right, clear of overlays) ──
                 if (_cameraExpanded)
                   Positioned(
                     right: 12,
@@ -524,10 +498,9 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                     ),
                   ),
 
-                // Alert overlay
                 if (tripController.activeAlerts.isNotEmpty)
                   Positioned(
-                    top: MediaQuery.of(context).padding.top + (isMinimal ? 8 : 60),
+                    top: MediaQuery.of(context).padding.top + 70,
                     left: 16,
                     right: 16,
                     child: TripAlertOverlay(
@@ -545,21 +518,634 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     );
   }
 
+  // ── Header (blue appbar) ──
+  Widget _buildHeader(BuildContext context, TripController controller) {
+    final topPad = MediaQuery.of(context).padding.top;
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, topPad + 14, 20, 36),
+      decoration: const BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage(AppImages.appbar),
+          fit: BoxFit.cover,
+        ),
+      ),
+      child: Row(
+        children: [
+          _circleButton(
+            icon: Icons.arrow_back_ios_new_rounded,
+            onTap: () => _showEndTripDialog(context, controller),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Driving Mode',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Proximity Guard Active',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                      shape: BoxShape.circle, color: Color(0xFF22C55E)),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Live',
+                  style: GoogleFonts.poppins(
+                    color: const Color(0xFF16A34A),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          _circleButton(
+            icon: Icons.notifications_none_rounded,
+            onTap: () => _showAlertsSheet(context, controller),
+            badge: controller.activeAlerts.isNotEmpty,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _circleButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    bool badge = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 42,
+        height: 42,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: const BoxDecoration(
+                  color: Colors.white, shape: BoxShape.circle),
+              child: Icon(icon, color: AppTheme.primary, size: 19),
+            ),
+            if (badge)
+              Positioned(
+                top: 7,
+                right: 7,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                      color: AppTheme.danger, shape: BoxShape.circle),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Speed card ──
+  Widget _buildSpeedCard(BuildContext context, TripDataModel data) {
+    final isOver = data.isOverSpeed;
+    final ratio = (data.currentSpeed / (data.speedLimit * 1.5)).clamp(0.0, 1.0);
+    final accent = isOver ? AppTheme.danger : AppTheme.primary;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: _cardBorder, width: 1),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0D000000), blurRadius: 16, offset: Offset(0, 6)),
+        ],
+      ),
+      child: Column(
+        children: [
+          Text(
+            'Current Speed',
+            style: GoogleFonts.poppins(color: _textGrey, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: 180,
+            height: 180,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CustomPaint(
+                  size: const Size(180, 180),
+                  painter: _SpeedGaugePainter(progress: ratio, over: isOver),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${data.currentSpeed.toInt()}',
+                      style: GoogleFonts.poppins(
+                        color: isOver ? AppTheme.danger : _textDark,
+                        fontSize: 48,
+                        fontWeight: FontWeight.w700,
+                        height: 1,
+                      ),
+                    ),
+                    Text(
+                      'km/h',
+                      style: GoogleFonts.poppins(
+                          color: _textGrey, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _statusPill(
+                icon: isOver
+                    ? Icons.warning_amber_rounded
+                    : Icons.verified_user_outlined,
+                text: isOver ? 'Over Limit' : 'Within Limit',
+                color: isOver ? AppTheme.danger : AppTheme.success,
+              ),
+              const SizedBox(width: 10),
+              _statusPill(
+                icon: Icons.speed_rounded,
+                text: 'Limit ${data.speedLimit.toInt()} km/h',
+                color: AppTheme.primary,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusPill(
+      {required IconData icon, required String text, required Color color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: GoogleFonts.poppins(
+                color: color, fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Following distance card ──
+  Widget _buildDistanceCard(BuildContext context, TripDataModel data) {
+    final tooClose = data.isTooClose;
+    final color = tooClose ? AppTheme.danger : AppTheme.success;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _cardBorder, width: 1),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0D000000), blurRadius: 14, offset: Offset(0, 6)),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  tooClose ? Icons.warning_rounded : Icons.shield_outlined,
+                  color: color,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  'Following Distance',
+                  style: GoogleFonts.poppins(
+                      color: _textDark,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${data.followingDistance.toInt()} m',
+                    style: GoogleFonts.poppins(
+                        color: color,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        height: 1),
+                  ),
+                  Text(
+                    'ahead',
+                    style:
+                        GoogleFonts.poppins(color: _textGrey, fontSize: 11),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                tooClose ? 'Too Close' : 'Safe Distance',
+                style: GoogleFonts.poppins(
+                    color: color, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Live tracking + map ──
+  Widget _buildLiveTracking(BuildContext context, TripDataModel data) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: const BoxDecoration(
+                  shape: BoxShape.circle, color: Color(0xFF22C55E)),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Live Tracking',
+              style: GoogleFonts.poppins(
+                  color: _textDark,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700),
+            ),
+            const Spacer(),
+            Icon(Icons.more_vert_rounded, color: _textGrey, size: 20),
+          ],
+        ),
+        const SizedBox(height: 12),
+        LiveRouteMap(
+          progress: data.routeProgress,
+          routeName: data.routeName,
+          isLive: true,
+          inGeofence: data.isInGeofence,
+          speedKmh: data.currentSpeed,
+        ),
+      ],
+    );
+  }
+
+  // ── Stats row ──
+  Widget _buildStatsRow(BuildContext context, TripDataModel data) {
+    final duration = data.tripDuration;
+    final timeStr =
+        '${duration.inMinutes.toString().padLeft(2, '0')}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}';
+
+    final progress = data.routeProgress.clamp(0.0, 1.0);
+    final covered = data.distanceCovered;
+    final kmLeft = (progress > 0.0 && progress < 1.0)
+        ? covered * (1 - progress) / progress
+        : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _cardBorder, width: 1),
+      ),
+      child: Row(
+        children: [
+          _statCol(Icons.near_me_rounded, 'Distance',
+              '${covered.toStringAsFixed(0)} km', const Color(0xFF0891B2)),
+          _statDivider(),
+          _statCol(Icons.flag_rounded, 'Km Left',
+              '${kmLeft.toStringAsFixed(1)} km', AppTheme.primary),
+          _statDivider(),
+          _statCol(Icons.access_time_rounded, 'Duration', timeStr,
+              const Color(0xFF7C3AED)),
+        ],
+      ),
+    );
+  }
+
+  Widget _statDivider() => Container(width: 1, height: 36, color: _cardBorder);
+
+  Widget _statCol(IconData icon, String label, String value, Color color) {
+    return Expanded(
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 6),
+          Text(label,
+              style: GoogleFonts.poppins(color: _textGrey, fontSize: 11)),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+                color: _textDark, fontSize: 14, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── End Trip + SOS ──
+  Widget _buildActionButtons(BuildContext context, TripController controller) {
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: GestureDetector(
+            onTap: () => _showEndTripDialog(context, controller),
+            child: Container(
+              height: 52,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                    colors: [Color(0xFFDC2626), Color(0xFFEF4444)]),
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                      color: AppTheme.danger.withValues(alpha: 0.25),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4)),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.power_settings_new_rounded,
+                      color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                  Text('End Trip',
+                      style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 2,
+          child: GestureDetector(
+            onTap: () => _showSos(context),
+            child: Container(
+              height: 52,
+              decoration: BoxDecoration(
+                color: AppTheme.danger.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.sos_rounded,
+                      color: AppTheme.danger, size: 18),
+                  const SizedBox(width: 8),
+                  Text('SOS',
+                      style: GoogleFonts.poppins(
+                          color: AppTheme.danger,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Bottom navigation ──
+  Widget _buildBottomNav(BuildContext context, TripController controller) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+          8, 8, 8, 8 + MediaQuery.of(context).padding.bottom),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: _cardBorder)),
+      ),
+      child: Row(
+        children: [
+          _navItem(Icons.dashboard_rounded, 'Dashboard',
+              active: true, onTap: () {}),
+          _navItem(Icons.notifications_none_rounded, 'Alerts',
+              badge: controller.activeAlerts.isNotEmpty
+                  ? controller.activeAlerts.length
+                  : null,
+              onTap: () => _showAlertsSheet(context, controller)),
+          _navItem(Icons.route_rounded, 'Trips', onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Trips — coming soon')),
+            );
+          }),
+          _navItem(Icons.person_outline_rounded, 'Profile', onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SettingsHubView()),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _navItem(IconData icon, String label,
+      {bool active = false, int? badge, required VoidCallback onTap}) {
+    final color = active ? AppTheme.primary : _textGrey;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(icon, color: color, size: 23),
+                  if (badge != null)
+                    Positioned(
+                      top: -4,
+                      right: -8,
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: AppTheme.danger,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: Text('$badge',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(label,
+                  style: GoogleFonts.poppins(
+                      color: color,
+                      fontSize: 10,
+                      fontWeight:
+                          active ? FontWeight.w600 : FontWeight.w500)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSos(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppTheme.danger.withValues(alpha: 0.1)),
+                child: const Icon(Icons.sos_rounded,
+                    color: AppTheme.danger, size: 30),
+              ),
+              const SizedBox(height: 16),
+              Text('Send SOS?',
+                  style: GoogleFonts.poppins(
+                      color: _textDark,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              Text(
+                'An emergency alert will be sent to your fleet manager with your location.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(color: _textGrey, fontSize: 13),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.danger,
+                          foregroundColor: Colors.white),
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('SOS alert sent')),
+                        );
+                      },
+                      child: const Text('Send'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Monitoring overlay (kept from the original) ────────────────────────────
+
   Widget _buildMonitorPreview() {
     final cam = _camera!;
     final ps = cam.value.previewSize;
     return Container(
-      width: 84,
-      height: 112,
+      width: 72,
+      height: 96,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 1.5),
+        border: Border.all(color: Colors.white, width: 2),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 12),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(12),
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -588,19 +1174,16 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                       width: 6,
                       height: 6,
                       decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Color(0xFF4ADE80),
-                      ),
+                          shape: BoxShape.circle, color: Color(0xFF4ADE80)),
                     ),
                     const SizedBox(width: 4),
                     Text(
                       'MONITOR',
                       style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 7,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                      ),
+                          color: Colors.white,
+                          fontSize: 7,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5),
                     ),
                   ],
                 ),
@@ -629,7 +1212,6 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                 child: CameraPreview(cam),
               ),
             ),
-          // SafeDrive-style live detection overlay
           SafeArea(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -660,36 +1242,28 @@ class _DrivingHudViewState extends State<DrivingHudView> {
           Container(
             width: 8,
             height: 8,
-            decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF4ADE80)),
+            decoration: const BoxDecoration(
+                shape: BoxShape.circle, color: Color(0xFF4ADE80)),
           ),
           const SizedBox(width: 6),
-          Text(
-            'MONITORING',
-            style: GoogleFonts.poppins(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
-            ),
-          ),
+          Text('MONITORING',
+              style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8)),
           const SizedBox(width: 12),
-          Text(
-            calText,
-            style: GoogleFonts.poppins(
-              color: calColor,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          Text(calText,
+              style: GoogleFonts.poppins(
+                  color: calColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700)),
           const Spacer(),
-          Text(
-            'FACES: ${_monitor.faceCount}',
-            style: GoogleFonts.poppins(
-              color: Colors.cyanAccent,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text('FACES: ${_monitor.faceCount}',
+              style: GoogleFonts.poppins(
+                  color: Colors.cyanAccent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -714,7 +1288,6 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     } else if (_monitor.distractionStatus == sd.DistractionStatus.distracted) {
       banner = _monitorBanner(Colors.yellow.shade700, '⚠  DISTRACTION DETECTED  ⚠', Colors.black, 17);
     }
-
     return banner ?? const SizedBox.shrink();
   }
 
@@ -723,16 +1296,14 @@ class _DrivingHudViewState extends State<DrivingHudView> {
       width: double.infinity,
       color: bg,
       padding: const EdgeInsets.all(14),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: GoogleFonts.poppins(color: fg, fontSize: size, fontWeight: FontWeight.w700),
-      ),
+      child: Text(text,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.poppins(
+              color: fg, fontSize: size, fontWeight: FontWeight.w700)),
     );
   }
 
   Widget _buildMonitorDiag() {
-    final distStr = _monitor.authDistance >= 0 ? _monitor.authDistance.toStringAsFixed(3) : '---';
     return Container(
       color: Colors.black.withValues(alpha: 0.8),
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 14),
@@ -758,20 +1329,16 @@ class _DrivingHudViewState extends State<DrivingHudView> {
         children: [
           SizedBox(
             width: 56,
-            child: Text(
-              label,
-              style: GoogleFonts.poppins(
-                color: Colors.cyanAccent,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            child: Text(label,
+                style: GoogleFonts.poppins(
+                    color: Colors.cyanAccent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700)),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11),
-            ),
+            child: Text(value,
+                style:
+                    GoogleFonts.poppins(color: Colors.white70, fontSize: 11)),
           ),
         ],
       ),
@@ -808,786 +1375,18 @@ class _DrivingHudViewState extends State<DrivingHudView> {
               color: Colors.black.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Text(
-              label,
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _buildFloatingShapes(Size size) {
-    return [
-      // Top-right circle
-      Positioned(
-        top: -30,
-        right: -40,
-        child: Container(
-          width: 140,
-          height: 140,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.white.withValues(alpha: 0.06),
-          ),
-        ),
-      ),
-      // Top-left small circle
-      Positioned(
-        top: 80,
-        left: -20,
-        child: Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.white.withValues(alpha: 0.04),
-          ),
-        ),
-      ),
-      // Middle-right dotted circle
-      Positioned(
-        top: size.height * 0.28,
-        right: 20,
-        child: Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: AppTheme.primary.withValues(alpha: 0.08),
-              width: 2,
-              strokeAlign: BorderSide.strokeAlignOutside,
-            ),
-          ),
-        ),
-      ),
-      // Bottom-left decorative ring
-      Positioned(
-        bottom: 120,
-        left: -25,
-        child: Container(
-          width: 70,
-          height: 70,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: AppTheme.primary.withValues(alpha: 0.06),
-              width: 1.5,
-            ),
-          ),
-        ),
-      ),
-      // Small dots scatter
-      Positioned(
-        top: 160,
-        right: 50,
-        child: _dot(6, AppTheme.accentSoft.withValues(alpha: 0.15)),
-      ),
-      Positioned(
-        top: size.height * 0.35,
-        left: 40,
-        child: _dot(4, AppTheme.primary.withValues(alpha: 0.1)),
-      ),
-      Positioned(
-        bottom: 200,
-        right: 60,
-        child: _dot(5, AppTheme.success.withValues(alpha: 0.12)),
-      ),
-      Positioned(
-        top: size.height * 0.55,
-        right: 30,
-        child: _dot(8, AppTheme.primary.withValues(alpha: 0.06)),
-      ),
-    ];
-  }
-
-  Widget _dot(double size, Color color) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context, TripController controller) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(13),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-            ),
-            child: const Icon(Icons.shield_rounded, color: Colors.white, size: 20),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Driving Mode',
+            child: Text(label,
                 style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  height: 1.2,
-                ),
-              ),
-              Text(
-                'Proximity Guard Active',
-                style: GoogleFonts.poppins(
-                  color: Colors.white.withValues(alpha: 0.6),
-                  fontSize: 9,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          // LIVE badge with glow
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF4ADE80),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF4ADE80).withValues(alpha: 0.6),
-                        blurRadius: 8,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'LIVE',
-                  style: GoogleFonts.poppins(
                     color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ],
-            ),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSpeedSection(BuildContext context, TripDataModel data) {
-    final isOverSpeed = data.isOverSpeed;
-    final speedRatio = (data.currentSpeed / (data.speedLimit * 1.5)).clamp(0.0, 1.0);
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-      decoration: BoxDecoration(
-        color: AppTheme.of(context).card,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: (isOverSpeed ? AppTheme.danger : AppTheme.primary).withValues(alpha: 0.08),
-            blurRadius: 30,
-            offset: const Offset(0, 10),
-          ),
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          // Subtle decorative corner shapes inside the card
-          Positioned(
-            top: -10,
-            right: -10,
-            child: Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: (isOverSpeed ? AppTheme.danger : AppTheme.primary).withValues(alpha: 0.03),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -10,
-            left: -10,
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: (isOverSpeed ? AppTheme.danger : AppTheme.primary).withValues(alpha: 0.03),
-              ),
-            ),
-          ),
-          Column(
-            children: [
-              SizedBox(
-                height: 170,
-                width: 170,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    CustomPaint(
-                      size: const Size(170, 170),
-                      painter: _CircularGaugePainter(
-                        progress: speedRatio,
-                        isOverSpeed: isOverSpeed,
-                      ),
-                    ),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '${data.currentSpeed.toInt()}',
-                          style: GoogleFonts.poppins(
-                            color: isOverSpeed ? AppTheme.danger : AppTheme.of(context).textPrimary,
-                            fontSize: 46,
-                            fontWeight: FontWeight.w700,
-                            height: 1.0,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: (isOverSpeed ? AppTheme.danger : AppTheme.primary)
-                                .withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            'km/h',
-                            style: GoogleFonts.poppins(
-                              color: isOverSpeed ? AppTheme.danger : AppTheme.of(context).textSecondary,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              // Speed limit row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _miniInfoChip(
-                    context: context,
-                    icon: Icons.speed_rounded,
-                    label: 'Limit',
-                    value: '${data.speedLimit.toInt()}',
-                    color: isOverSpeed ? AppTheme.danger : AppTheme.primary,
-                  ),
-                  const SizedBox(width: 12),
-                  Container(width: 1, height: 28, color: AppTheme.of(context).cardBorder),
-                  const SizedBox(width: 12),
-                  _miniInfoChip(
-                    context: context,
-                    icon: isOverSpeed ? Icons.trending_up_rounded : Icons.check_circle_outline_rounded,
-                    label: 'Status',
-                    value: isOverSpeed ? 'Over' : 'OK',
-                    color: isOverSpeed ? AppTheme.danger : AppTheme.success,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _miniInfoChip({
-    required BuildContext context,
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: color, size: 15),
-        ),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                color: AppTheme.of(context).textMuted,
-                fontSize: 9,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-            Text(
-              value,
-              style: GoogleFonts.poppins(
-                color: color,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                height: 1.1,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDistanceCard(BuildContext context, TripDataModel data) {
-    final isTooClose = data.isTooClose;
-    final color = isTooClose ? AppTheme.danger : AppTheme.success;
-    final distRatio = (data.followingDistance / 100).clamp(0.0, 1.0);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.of(context).card,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: isTooClose ? AppTheme.danger.withValues(alpha: 0.2) : AppTheme.of(context).cardBorder,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Left: icon + info
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [color, color.withValues(alpha: 0.7)],
-              ),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(
-              isTooClose ? Icons.warning_rounded : Icons.verified_rounded,
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isTooClose ? 'Too Close!' : 'Safe Distance',
-                  style: GoogleFonts.poppins(
-                    color: AppTheme.of(context).textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                // Mini bar
-                Stack(
-                  children: [
-                    Container(
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    ),
-                    FractionallySizedBox(
-                      widthFactor: distRatio,
-                      child: Container(
-                        height: 5,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(3),
-                          color: color,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 14),
-          // Right: distance value
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${data.followingDistance.toInt()}m',
-                style: GoogleFonts.poppins(
-                  color: color,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  height: 1,
-                ),
-              ),
-              Text(
-                'ahead',
-                style: GoogleFonts.poppins(
-                  color: AppTheme.of(context).textMuted,
-                  fontSize: 10,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRouteCard(BuildContext context, TripDataModel data) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.of(context).card,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppTheme.of(context).cardBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  gradient: AppTheme.primaryGradient,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.route_rounded, color: Colors.white, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  data.routeName,
-                  style: GoogleFonts.poppins(
-                    color: AppTheme.of(context).textPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '${(data.routeProgress * 100).toInt()}%',
-                  style: GoogleFonts.poppins(
-                    color: AppTheme.primary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Segmented progress bar
-          Row(
-            children: List.generate(10, (i) {
-              final filled = i / 10 < data.routeProgress;
-              return Expanded(
-                child: Container(
-                  height: 5,
-                  margin: EdgeInsets.only(right: i < 9 ? 3 : 0),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(3),
-                    color: filled ? AppTheme.primary : AppTheme.of(context).cardBorder,
-                  ),
-                ),
-              );
-            }),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTripStats(BuildContext context, TripDataModel data) {
-    final duration = data.tripDuration;
-    final timeStr = '${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}';
-
-    return Row(
-      children: [
-        Expanded(
-          child: _buildStatTile(
-            context: context,
-            icon: Icons.access_time_rounded,
-            value: timeStr,
-            label: 'Duration',
-            color: const Color(0xFF7C3AED),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildStatTile(
-            context: context,
-            icon: Icons.near_me_rounded,
-            value: '${data.distanceCovered.toStringAsFixed(1)} km',
-            label: 'Distance',
-            color: const Color(0xFF0891B2),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatTile({
-    required BuildContext context,
-    required IconData icon,
-    required String value,
-    required String label,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.of(context).card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppTheme.of(context).cardBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [color, color.withValues(alpha: 0.7)],
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: Colors.white, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: GoogleFonts.poppins(
-                    color: AppTheme.of(context).textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    height: 1.1,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  label,
-                  style: GoogleFonts.poppins(
-                    color: AppTheme.of(context).textMuted,
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomBar(BuildContext context, TripController controller) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
-        color: AppTheme.of(context).card,
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 16,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildNavItem(
-              context: context,
-              icon: controller.drivingMode == DrivingMode.minimal
-                  ? Icons.fullscreen_rounded
-                  : Icons.grid_view_rounded,
-              label: controller.drivingMode == DrivingMode.minimal ? 'Full' : 'Minimal',
-              onTap: () => controller.toggleDrivingMode(),
-            ),
-          ),
-          Expanded(
-            child: _buildNavItem(
-              context: context,
-              icon: Icons.notifications_none_rounded,
-              label: 'Alerts',
-              badge: controller.activeAlerts.isNotEmpty ? controller.activeAlerts.length : null,
-              onTap: () => _showAlertsSheet(context, controller),
-            ),
-          ),
-          Expanded(
-            child: _buildNavItem(
-              context: context,
-              icon: Icons.settings_rounded,
-              label: 'Settings',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsHubView()),
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: () => _showEndTripDialog(context, controller),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFDC2626), Color(0xFFEF4444)],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.danger.withValues(alpha: 0.25),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.stop_rounded, color: Colors.white, size: 18),
-                  const SizedBox(width: 6),
-                  Text(
-                    'End Trip',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNavItem({
-    required BuildContext context,
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    int? badge,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(icon, color: AppTheme.of(context).textSecondary, size: 23),
-                if (badge != null)
-                  Positioned(
-                    top: -4,
-                    right: -8,
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        color: AppTheme.danger,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 1.5),
-                      ),
-                      child: Text(
-                        '$badge',
-                        style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: GoogleFonts.poppins(color: AppTheme.of(context).textMuted, fontSize: 9, fontWeight: FontWeight.w500),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // ─── Alerts sheet & dialogs (kept from the original) ────────────────────────
 
   void _showAlertsSheet(BuildContext context, TripController controller) {
     showModalBottomSheet(
@@ -1629,28 +1428,23 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                         color: AppTheme.primary.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.notifications_rounded, color: AppTheme.primary, size: 20),
+                      child: const Icon(Icons.notifications_rounded,
+                          color: AppTheme.primary, size: 20),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Trip Alerts',
-                            style: GoogleFonts.poppins(
-                              color: AppTheme.of(context).textPrimary,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          Text(
-                            '${activeAlerts.length} active · ${allAlerts.length} total',
-                            style: GoogleFonts.poppins(
-                              color: AppTheme.of(context).textMuted,
-                              fontSize: 10,
-                            ),
-                          ),
+                          Text('Trip Alerts',
+                              style: GoogleFonts.poppins(
+                                  color: AppTheme.of(context).textPrimary,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700)),
+                          Text('${activeAlerts.length} active · ${allAlerts.length} total',
+                              style: GoogleFonts.poppins(
+                                  color: AppTheme.of(context).textMuted,
+                                  fontSize: 10)),
                         ],
                       ),
                     ),
@@ -1663,19 +1457,19 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                           Navigator.of(ctx).pop();
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: AppTheme.of(context).textMuted.withValues(alpha: 0.08),
+                            color: AppTheme.of(context)
+                                .textMuted
+                                .withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Text(
-                            'Clear All',
-                            style: GoogleFonts.poppins(
-                              color: AppTheme.of(context).textSecondary,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                          child: Text('Clear All',
+                              style: GoogleFonts.poppins(
+                                  color: AppTheme.of(context).textSecondary,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600)),
                         ),
                       ),
                   ],
@@ -1687,17 +1481,20 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                   padding: const EdgeInsets.symmetric(vertical: 40),
                   child: Column(
                     children: [
-                      Icon(Icons.check_circle_outline_rounded, size: 48, color: AppTheme.success.withValues(alpha: 0.5)),
+                      Icon(Icons.check_circle_outline_rounded,
+                          size: 48,
+                          color: AppTheme.success.withValues(alpha: 0.5)),
                       const SizedBox(height: 12),
-                      Text(
-                        'No alerts yet',
-                        style: GoogleFonts.poppins(color: AppTheme.of(context).textMuted, fontSize: 13, fontWeight: FontWeight.w500),
-                      ),
+                      Text('No alerts yet',
+                          style: GoogleFonts.poppins(
+                              color: AppTheme.of(context).textMuted,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500)),
                       const SizedBox(height: 4),
-                      Text(
-                        'Drive safe!',
-                        style: GoogleFonts.poppins(color: AppTheme.of(context).textMuted, fontSize: 11),
-                      ),
+                      Text('Drive safe!',
+                          style: GoogleFonts.poppins(
+                              color: AppTheme.of(context).textMuted,
+                              fontSize: 11)),
                     ],
                   ),
                 )
@@ -1709,7 +1506,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                     itemCount: allAlerts.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (_, i) {
-                      final alert = allAlerts[allAlerts.length - 1 - i]; // newest first
+                      final alert = allAlerts[allAlerts.length - 1 - i];
                       final color = _sheetAlertColor(alert.severity);
                       final icon = _sheetAlertIcon(alert.type);
                       final isDismissed = alert.isDismissed;
@@ -1719,10 +1516,14 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: isDismissed ? AppTheme.of(context).surface : AppTheme.of(context).card,
+                            color: isDismissed
+                                ? AppTheme.of(context).surface
+                                : AppTheme.of(context).card,
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: isDismissed ? AppTheme.of(context).cardBorder : color.withValues(alpha: 0.25),
+                              color: isDismissed
+                                  ? AppTheme.of(context).cardBorder
+                                  : color.withValues(alpha: 0.25),
                             ),
                           ),
                           child: Row(
@@ -1741,23 +1542,21 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      alert.title,
-                                      style: GoogleFonts.poppins(
-                                        color: isDismissed ? AppTheme.of(context).textMuted : AppTheme.of(context).textPrimary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    Text(
-                                      alert.message,
-                                      style: GoogleFonts.poppins(
-                                        color: AppTheme.of(context).textMuted,
-                                        fontSize: 9,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                                    Text(alert.title,
+                                        style: GoogleFonts.poppins(
+                                            color: isDismissed
+                                                ? AppTheme.of(context).textMuted
+                                                : AppTheme.of(context)
+                                                    .textPrimary,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600)),
+                                    Text(alert.message,
+                                        style: GoogleFonts.poppins(
+                                            color:
+                                                AppTheme.of(context).textMuted,
+                                            fontSize: 9),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis),
                                   ],
                                 ),
                               ),
@@ -1768,10 +1567,14 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                                     width: 28,
                                     height: 28,
                                     decoration: BoxDecoration(
-                                      color: AppTheme.of(context).cardBorder.withValues(alpha: 0.3),
+                                      color: AppTheme.of(context)
+                                          .cardBorder
+                                          .withValues(alpha: 0.3),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
-                                    child: Icon(Icons.close_rounded, size: 13, color: AppTheme.of(context).textMuted),
+                                    child: Icon(Icons.close_rounded,
+                                        size: 13,
+                                        color: AppTheme.of(context).textMuted),
                                   ),
                                 ),
                             ],
@@ -1827,14 +1630,22 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                   shape: BoxShape.circle,
                   color: AppTheme.danger.withValues(alpha: 0.08),
                 ),
-                child: const Icon(Icons.stop_circle_rounded, size: 36, color: AppTheme.danger),
+                child: const Icon(Icons.stop_circle_rounded,
+                    size: 36, color: AppTheme.danger),
               ),
               const SizedBox(height: 20),
-              Text('End Trip?', style: GoogleFonts.poppins(color: AppTheme.of(context).textPrimary, fontSize: 17, fontWeight: FontWeight.w700)),
+              Text('End Trip?',
+                  style: GoogleFonts.poppins(
+                      color: AppTheme.of(context).textPrimary,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               Text(
                 'This will stop all monitoring and end the current driving session.',
-                style: GoogleFonts.poppins(color: AppTheme.of(context).textSecondary, fontSize: 11, height: 1.5),
+                style: GoogleFonts.poppins(
+                    color: AppTheme.of(context).textSecondary,
+                    fontSize: 11,
+                    height: 1.5),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 28),
@@ -1845,11 +1656,15 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                       onPressed: () => Navigator.of(ctx).pop(),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.of(context).textSecondary,
-                        side: BorderSide(color: AppTheme.of(context).cardBorder),
+                        side:
+                            BorderSide(color: AppTheme.of(context).cardBorder),
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
                       ),
-                      child: Text('Cancel', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
+                      child: Text('Cancel',
+                          style:
+                              GoogleFonts.poppins(fontWeight: FontWeight.w500)),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1860,17 +1675,21 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                         Navigator.of(ctx).pop();
                         controller.endTrip();
                         Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => const PostTripSummaryView()),
+                          MaterialPageRoute(
+                              builder: (_) => const PostTripSummaryView()),
                         );
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.danger,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
                         elevation: 0,
                       ),
-                      child: Text('End Trip', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                      child: Text('End Trip',
+                          style:
+                              GoogleFonts.poppins(fontWeight: FontWeight.w600)),
                     ),
                   ),
                 ],
@@ -1883,173 +1702,36 @@ class _DrivingHudViewState extends State<DrivingHudView> {
   }
 }
 
-/// Custom background painter with wave curves, road illustration, and decorations
-class _BackgroundPainter extends CustomPainter {
-  final bool isOverSpeed;
-  final bool isDark;
-
-  _BackgroundPainter({required this.isOverSpeed, required this.isDark});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final mainColor = isOverSpeed ? const Color(0xFFDC2626) : const Color(0xFF2563EB);
-
-    // Base background
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, w, h),
-      Paint()..color = isDark ? const Color(0xFF0F172A) : const Color(0xFFF6F8FB),
-    );
-
-    // Top curved gradient header
-    final headerPath = Path()
-      ..moveTo(0, 0)
-      ..lineTo(w, 0)
-      ..lineTo(w, h * 0.32)
-      ..quadraticBezierTo(w * 0.75, h * 0.37, w * 0.5, h * 0.35)
-      ..quadraticBezierTo(w * 0.25, h * 0.33, 0, h * 0.38)
-      ..close();
-
-    final headerGradient = LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: isOverSpeed
-          ? [const Color(0xFFDC2626), const Color(0xFFEF4444)]
-          : [const Color(0xFF1E40AF), const Color(0xFF3B82F6)],
-    );
-
-    canvas.drawPath(
-      headerPath,
-      Paint()..shader = headerGradient.createShader(Rect.fromLTWH(0, 0, w, h * 0.4)),
-    );
-
-    // Second wave layer (lighter)
-    final wave2 = Path()
-      ..moveTo(0, h * 0.30)
-      ..quadraticBezierTo(w * 0.3, h * 0.34, w * 0.6, h * 0.31)
-      ..quadraticBezierTo(w * 0.85, h * 0.29, w, h * 0.33)
-      ..lineTo(w, h * 0.36)
-      ..quadraticBezierTo(w * 0.7, h * 0.40, w * 0.4, h * 0.37)
-      ..quadraticBezierTo(w * 0.15, h * 0.35, 0, h * 0.40)
-      ..close();
-
-    canvas.drawPath(
-      wave2,
-      Paint()..color = mainColor.withValues(alpha: 0.12),
-    );
-
-    // Dotted road-like lines in the header
-    final roadPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.08)
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round;
-
-    // Left road line
-    for (double y = 0; y < h * 0.32; y += 18) {
-      canvas.drawLine(
-        Offset(w * 0.15, y),
-        Offset(w * 0.15, y + 8),
-        roadPaint,
-      );
-    }
-
-    // Right road line
-    for (double y = 0; y < h * 0.32; y += 18) {
-      canvas.drawLine(
-        Offset(w * 0.85, y),
-        Offset(w * 0.85, y + 8),
-        roadPaint,
-      );
-    }
-
-    // Center dashed line (road median)
-    final medianPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.15)
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round;
-
-    for (double y = 20; y < h * 0.30; y += 24) {
-      canvas.drawLine(
-        Offset(w * 0.5, y),
-        Offset(w * 0.5, y + 12),
-        medianPaint,
-      );
-    }
-
-    // Bottom subtle wave pattern
-    final bottomWave = Path()
-      ..moveTo(0, h)
-      ..lineTo(0, h * 0.92)
-      ..quadraticBezierTo(w * 0.25, h * 0.90, w * 0.5, h * 0.92)
-      ..quadraticBezierTo(w * 0.75, h * 0.94, w, h * 0.91)
-      ..lineTo(w, h)
-      ..close();
-
-    canvas.drawPath(
-      bottomWave,
-      Paint()..color = mainColor.withValues(alpha: 0.03),
-    );
-
-    // Grid dots pattern in bottom area
-    final dotPaint = Paint()..color = mainColor.withValues(alpha: 0.04);
-    for (double x = 30; x < w; x += 30) {
-      for (double y = h * 0.65; y < h * 0.90; y += 30) {
-        canvas.drawCircle(Offset(x, y), 1.5, dotPaint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_BackgroundPainter old) => old.isOverSpeed != isOverSpeed || old.isDark != isDark;
-}
-
-/// Circular gauge painter
-class _CircularGaugePainter extends CustomPainter {
+/// Clean speed gauge (270° arc, no tick marks).
+class _SpeedGaugePainter extends CustomPainter {
   final double progress;
-  final bool isOverSpeed;
+  final bool over;
 
-  _CircularGaugePainter({required this.progress, required this.isOverSpeed});
+  _SpeedGaugePainter({required this.progress, required this.over});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width * 0.44;
+    final radius = size.width * 0.42;
     const startAngle = math.pi * 0.75;
     const sweepAngle = math.pi * 1.5;
 
-    // Background track
+    // Track
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
       startAngle,
       sweepAngle,
       false,
       Paint()
-        ..color = const Color(0xFFE2E8F0)
+        ..color = const Color(0xFFE6E9F1)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 10
+        ..strokeWidth = 13
         ..strokeCap = StrokeCap.round,
     );
 
-    // Tick marks
-    for (int i = 0; i <= 10; i++) {
-      final angle = startAngle + (sweepAngle * i / 10);
-      final isMajor = i % 5 == 0;
-      final innerR = radius + 8;
-      final outerR = radius + (isMajor ? 16 : 12);
-      canvas.drawLine(
-        Offset(center.dx + innerR * math.cos(angle), center.dy + innerR * math.sin(angle)),
-        Offset(center.dx + outerR * math.cos(angle), center.dy + outerR * math.sin(angle)),
-        Paint()
-          ..color = const Color(0xFFCBD5E1)
-          ..strokeWidth = isMajor ? 2 : 1
-          ..strokeCap = StrokeCap.round,
-      );
-    }
-
     if (progress <= 0) return;
 
-    final activeColors = isOverSpeed
+    final colors = over
         ? [const Color(0xFFDC2626), const Color(0xFFF87171)]
         : [const Color(0xFF2563EB), const Color(0xFF60A5FA)];
 
@@ -2063,21 +1745,25 @@ class _CircularGaugePainter extends CustomPainter {
         ..shader = SweepGradient(
           startAngle: startAngle,
           endAngle: startAngle + sweepAngle,
-          colors: activeColors,
+          colors: colors,
         ).createShader(rect)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 10
+        ..strokeWidth = 13
         ..strokeCap = StrokeCap.round,
     );
 
-    // End dot
     final endAngle = startAngle + sweepAngle * progress;
-    final dot = Offset(center.dx + radius * math.cos(endAngle), center.dy + radius * math.sin(endAngle));
+    final dot = Offset(center.dx + radius * math.cos(endAngle),
+        center.dy + radius * math.sin(endAngle));
     canvas.drawCircle(dot, 7, Paint()..color = Colors.white);
-    canvas.drawCircle(dot, 5, Paint()..color = isOverSpeed ? const Color(0xFFDC2626) : const Color(0xFF2563EB));
+    canvas.drawCircle(
+        dot,
+        5,
+        Paint()
+          ..color = over ? const Color(0xFFDC2626) : const Color(0xFF2563EB));
   }
 
   @override
-  bool shouldRepaint(_CircularGaugePainter old) =>
-      old.progress != progress || old.isOverSpeed != isOverSpeed;
+  bool shouldRepaint(_SpeedGaugePainter old) =>
+      old.progress != progress || old.over != over;
 }

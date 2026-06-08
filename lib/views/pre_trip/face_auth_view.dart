@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:avatar_glow/avatar_glow.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:provider/provider.dart';
 
@@ -14,6 +14,7 @@ import '../../models/auth_result_model.dart';
 import '../../core/face_auth_engine.dart';
 import '../../core/monitor_state.dart' as sd;
 import '../theme/app_theme.dart';
+import '../theme/app_assets.dart';
 
 /// Live face verification screen.
 class FaceAuthView extends StatefulWidget {
@@ -353,29 +354,37 @@ class _FaceAuthViewState extends State<FaceAuthView> {
     super.dispose();
   }
 
-  // ─── UI ─────────────────────────────────────────────────────────────────────
+  // ─── UI (redesigned to match the mock) ──────────────────────────────────────
+
+  static const Color _textDark = Color(0xFF1B2335);
+  static const Color _textGrey = Color(0xFF8A93A6);
+  static const Color _ringTrack = Color(0xFFE6E9F1);
+  static const Color _tipsBg = Color(0xFFF3F5F9);
 
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthController>(
       builder: (context, authController, _) {
+        final status = authController.status;
+
+        // Success gets its own celebratory layout (matches the mock).
+        if (status == AuthStatus.success) {
+          return _buildSuccessView(context, authController);
+        }
+
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Spacer(flex: 1),
-              _buildScannerFrame(authController.status),
-              const SizedBox(height: 36),
+              const Spacer(flex: 2),
+              _buildScannerFrame(status),
+              const SizedBox(height: 30),
               _buildStatusSection(context, authController),
-              const Spacer(flex: 1),
-              if (authController.status == AuthStatus.success)
-                _buildContinueButton(context)
-              else if (authController.status == AuthStatus.failed)
+              const Spacer(flex: 3),
+              if (status == AuthStatus.failed)
                 _buildRetrySection(context, authController)
               else
-                _buildBackButton(context, authController),
-              const SizedBox(height: 24),
+                _buildTipsCard(),
             ],
           ),
         );
@@ -383,115 +392,242 @@ class _FaceAuthViewState extends State<FaceAuthView> {
     );
   }
 
-  Widget _buildScannerFrame(AuthStatus status) {
-    Color glowColor;
-    switch (status) {
-      case AuthStatus.success:
-        glowColor = AppTheme.success;
-      case AuthStatus.failed:
-        glowColor = AppTheme.danger;
-      default:
-        glowColor = AppTheme.primary;
-    }
-
-    return AvatarGlow(
-      glowColor: glowColor,
-      glowRadiusFactor: 0.3,
-      animate: status == AuthStatus.inProgress,
-      child: Container(
-        width: 150,
-        height: 150,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: glowColor.withValues(alpha: 0.08),
-          border: Border.all(color: glowColor, width: 3),
-        ),
-        child: ClipOval(child: _buildScannerContent(status, glowColor)),
+  // ── Success layout ──────────────────────────────────────────────────────────
+  Widget _buildSuccessView(BuildContext context, AuthController controller) {
+    final driver = controller.authenticatedDriver;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+      child: Column(
+        children: [
+          const Spacer(flex: 1),
+          _buildConfettiCircle(),
+          const SizedBox(height: 22),
+          Image.asset(AppImages.verify, width: 52, height: 52),
+          const SizedBox(height: 14),
+          Text(
+            'Identity Verified!',
+            style: GoogleFonts.poppins(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.success,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'You have been successfully verified',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(fontSize: 14, color: _textGrey),
+          ),
+          const SizedBox(height: 22),
+          Text(
+            'Welcome back,',
+            style: GoogleFonts.poppins(fontSize: 14, color: _textGrey),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            driver?.name ?? 'Driver',
+            style: GoogleFonts.poppins(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: _textDark,
+            ),
+          ),
+          if (driver != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'Driver ID: ${driver.id}',
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.primary,
+                ),
+              ),
+            ),
+          ],
+          const Spacer(flex: 2),
+          _buildContinueButton(context),
+        ],
       ),
     );
   }
 
-  Widget _buildScannerContent(AuthStatus status, Color glowColor) {
-    if (status == AuthStatus.success) {
-      return Center(child: Icon(Icons.check_circle_rounded, size: 60, color: glowColor));
+  /// Live camera circle with a green ring + light confetti scattered around it.
+  Widget _buildConfettiCircle() {
+    const amber = Color(0xFFF5C842);
+    return SizedBox(
+      width: double.infinity,
+      height: 240,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          // ── left side scatter ──
+          Positioned(left: 16, top: 152, child: _diamond(AppTheme.primary, 11)),
+          Positioned(left: 58, top: 112, child: _dot(AppTheme.success, 7)),
+          Positioned(left: 40, top: 74, child: _dot(AppTheme.success, 5)),
+          Positioned(left: 62, top: 170, child: _diamond(AppTheme.success, 8)),
+          Positioned(left: 22, top: 206, child: _diamond(amber, 9)),
+          Positioned(left: 64, top: 200, child: _dot(AppTheme.success, 5)),
+          Positioned(left: 30, top: 122, child: _dot(amber, 4)),
+          Positioned(left: 50, top: 146, child: _dot(AppTheme.primary, 4)),
+          Positioned(left: 18, top: 96, child: _dot(AppTheme.success, 4)),
+          Positioned(left: 44, top: 44, child: _dot(AppTheme.primary, 4)),
+          // ── right side scatter ──
+          Positioned(right: 16, top: 152, child: _diamond(AppTheme.primary, 11)),
+          Positioned(right: 58, top: 112, child: _dot(AppTheme.primary, 7)),
+          Positioned(right: 40, top: 74, child: _dot(AppTheme.success, 5)),
+          Positioned(right: 62, top: 170, child: _diamond(AppTheme.success, 8)),
+          Positioned(right: 22, top: 206, child: _diamond(amber, 9)),
+          Positioned(right: 64, top: 200, child: _dot(AppTheme.success, 5)),
+          Positioned(right: 30, top: 122, child: _dot(amber, 4)),
+          Positioned(right: 50, top: 146, child: _dot(AppTheme.success, 4)),
+          Positioned(right: 18, top: 96, child: _dot(AppTheme.primary, 4)),
+          Positioned(right: 44, top: 44, child: _dot(AppTheme.success, 4)),
+          // circle (drawn last, sits above the scatter)
+          _buildScannerFrame(AuthStatus.success),
+        ],
+      ),
+    );
+  }
+
+  Widget _dot(Color color, double size) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      );
+
+  Widget _diamond(Color color, double size) => Transform.rotate(
+        angle: 0.785398, // 45°
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      );
+
+  Widget _buildScannerFrame(AuthStatus status) {
+    Color ringColor;
+    switch (status) {
+      case AuthStatus.success:
+        ringColor = AppTheme.success;
+      case AuthStatus.failed:
+        ringColor = AppTheme.danger;
+      default:
+        ringColor = AppTheme.primary;
     }
+
+    const double size = 200;
+    const double inner = 172;
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Live camera circle
+          Container(
+            width: inner,
+            height: inner,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: ringColor.withValues(alpha: 0.06),
+              border: Border.all(color: _ringTrack, width: 1),
+            ),
+            child: ClipOval(child: _buildScannerContent(status, ringColor)),
+          ),
+          // Scanning ring
+          SizedBox(
+            width: size,
+            height: size,
+            child: CircularProgressIndicator(
+              strokeWidth: 4,
+              value: status == AuthStatus.inProgress ? null : 1,
+              valueColor: AlwaysStoppedAnimation(ringColor),
+              backgroundColor: _ringTrack,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScannerContent(AuthStatus status, Color ringColor) {
     if (status == AuthStatus.failed) {
-      return Center(child: Icon(Icons.error_rounded, size: 60, color: glowColor));
+      return Center(
+          child: Icon(Icons.error_rounded, size: 64, color: ringColor));
     }
 
     final cam = _camera;
     if (!_camReady || cam == null || cam.value.previewSize == null) {
       return Center(
         child: SizedBox(
-          width: 36,
-          height: 36,
-          child: CircularProgressIndicator(strokeWidth: 2.5, color: glowColor),
+          width: 34,
+          height: 34,
+          child: CircularProgressIndicator(strokeWidth: 2.5, color: ringColor),
         ),
       );
     }
 
     final ps = cam.value.previewSize!;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        FittedBox(
-          fit: BoxFit.cover,
-          child: SizedBox(
-            width: ps.height,
-            height: ps.width,
-            child: CameraPreview(cam),
-          ),
-        ),
-        SizedBox(
-          width: 150,
-          height: 150,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.5,
-            color: glowColor,
-            backgroundColor: glowColor.withValues(alpha: 0.1),
-          ),
-        ),
-      ],
+    return FittedBox(
+      fit: BoxFit.cover,
+      child: SizedBox(
+        width: ps.height,
+        height: ps.width,
+        child: CameraPreview(cam),
+      ),
     );
   }
 
   Widget _buildStatusSection(BuildContext context, AuthController controller) {
     String title;
-    Color titleColor = AppTheme.of(context).textPrimary;
+    Color titleColor;
+    String subtitle;
 
     switch (controller.status) {
       case AuthStatus.success:
         title = 'Identity Verified';
         titleColor = AppTheme.accent;
-      case AuthStatus.inProgress:
-        title = (_camReady && _engineReady) ? 'Scanning...' : 'Getting Ready...';
+        subtitle = controller.message;
       case AuthStatus.failed:
         title = 'Verification Failed';
         titleColor = AppTheme.danger;
+        subtitle = controller.message;
       default:
-        title = 'Face Authentication';
+        title = 'Look at the camera';
+        titleColor = AppTheme.primary;
+        subtitle = 'Position your face in the frame\nto verify your identity';
     }
-
-    final subtitle = controller.status == AuthStatus.inProgress
-        ? _hint
-        : controller.message;
 
     return Column(
       children: [
         Text(
           title,
-          style: TextStyle(
-            color: titleColor,
-            fontSize: 24,
+          style: GoogleFonts.poppins(
+            fontSize: 22,
             fontWeight: FontWeight.w700,
-            letterSpacing: -0.3,
+            color: titleColor,
           ),
         ),
         const SizedBox(height: 8),
         Text(
           subtitle,
-          style: TextStyle(color: AppTheme.of(context).textSecondary, fontSize: 14),
           textAlign: TextAlign.center,
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            height: 1.4,
+            color: _textGrey,
+          ),
         ),
         if (controller.status == AuthStatus.success &&
             controller.authenticatedDriver != null) ...[
@@ -505,7 +641,7 @@ class _FaceAuthViewState extends State<FaceAuthView> {
             ),
             child: Text(
               controller.authenticatedDriver!.name,
-              style: const TextStyle(
+              style: GoogleFonts.poppins(
                 color: AppTheme.accent,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -514,6 +650,48 @@ class _FaceAuthViewState extends State<FaceAuthView> {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildTipsCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _tipsBg,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Image.asset(AppImages.tips, width: 26, height: 26),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Tips',
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: _textDark,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Make sure your face is clearly visible and well lit.',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    height: 1.35,
+                    color: _textGrey,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -549,14 +727,6 @@ class _FaceAuthViewState extends State<FaceAuthView> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildBackButton(BuildContext context, AuthController controller) {
-    return TextButton.icon(
-      onPressed: () => controller.reset(),
-      icon: Icon(Icons.arrow_back_rounded, size: 18, color: AppTheme.of(context).textSecondary),
-      label: Text('Choose another method', style: TextStyle(color: AppTheme.of(context).textSecondary)),
     );
   }
 }

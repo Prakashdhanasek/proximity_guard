@@ -1,92 +1,87 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/auth_controller.dart';
-import '../../l10n/app_localizations.dart';
 import '../../models/auth_result_model.dart';
-import '../theme/app_theme.dart';
+import '../theme/app_assets.dart';
 import 'face_auth_view.dart';
 import 'pin_auth_view.dart';
 import 'rfid_auth_view.dart';
 import 'mobile_approval_view.dart';
 
+/// Step 1 of the pre-trip flow: "Verify your identity".
+///
+/// Icons are pulled from [AppImages]. Make sure these entries exist in
+/// app_assets.dart (adjust the names if yours differ):
+///
+///   static const String face            = 'assets/images/face.png';
+///   static const String pin             = 'assets/images/pin.png';
+///   static const String nfc             = 'assets/images/nfc.png';
+///   static const String managerApproval = 'assets/images/manager_aprroval.png';
 class AuthMethodSelectorView extends StatelessWidget {
   const AuthMethodSelectorView({super.key});
+
+  static const Color _textDark = Color(0xFF1B2335);
+  static const Color _textGrey = Color(0xFF8A93A6);
 
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthController>(
       builder: (context, authController, _) {
-        // if (authController.currentMethod != null &&
-        //     authController.status != AuthStatus.idle) {
-        //   return _buildActiveAuthView(authController.currentMethod!);
-        // }
-
+        // Once a method is selected / running, show that method's screen.
         if (authController.currentMethod != null) {
-  return _buildActiveAuthView(authController.currentMethod!);
-}
+          return _buildActiveAuthView(authController.currentMethod!);
+        }
 
         return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 8),
               Text(
-                AppLocalizations.of(context).verifyIdentity,
-                style: Theme.of(context).textTheme.headlineLarge,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                AppLocalizations.of(context).chooseAuthMethod,
-                style: TextStyle(
-                  color: AppTheme.of(context).textSecondary,
-                  fontSize: 15,
-                  height: 1.4,
+                'Verify your identity',
+                style: GoogleFonts.poppins(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: _textDark,
                 ),
               ),
-              const SizedBox(height: 28),
-              _buildAuthOption(
-                context,
-                icon: Icons.face_retouching_natural,
-                title: AppLocalizations.of(context).faceRecognition,
-                subtitle: AppLocalizations.of(context).instantVerification,
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
-                ),
-                recommended: true,
+              const SizedBox(height: 6),
+              Text(
+                'Choose a verification method to continue.',
+                style: GoogleFonts.poppins(fontSize: 14, color: _textGrey),
+              ),
+              const SizedBox(height: 20),
+
+              _MethodCard(
+                iconAsset: AppImages.face,
+                title: 'Face Recognition',
+                subtitle: 'Fast, Secure & Hands-Free',
                 onTap: () => authController.authenticateWithFace(),
               ),
               const SizedBox(height: 14),
-              _buildAuthOption(
-                context,
-                icon: Icons.dialpad_rounded,
-                title: AppLocalizations.of(context).securityPin,
-                subtitle: AppLocalizations.of(context).enterPinCode,
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF10B981), Color(0xFF059669)],
-                ),
+
+              _MethodCard(
+                iconAsset: AppImages.pin,
+                title: 'Security PIN',
+                subtitle: 'Enter your 4-digit code',
                 onTap: () => authController.selectMethod(AuthMethod.pin),
               ),
               const SizedBox(height: 14),
-              _buildAuthOption(
-                context,
-                icon: Icons.contactless_rounded,
-                title: AppLocalizations.of(context).nfcRfidCard,
-                subtitle: AppLocalizations.of(context).tapCard,
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                ),
+
+              _MethodCard(
+                iconAsset: AppImages.nfc,
+                title: 'NFC/RFID Card',
+                subtitle: 'Tap your authorized card',
                 onTap: () => authController.authenticateWithRfid(),
               ),
               const SizedBox(height: 14),
-              _buildAuthOption(
-                context,
-                icon: Icons.phone_iphone_rounded,
-                title: AppLocalizations.of(context).managerApproval,
-                subtitle: AppLocalizations.of(context).requestAuth,
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFF43F5E), Color(0xFFE11D48)],
-                ),
+
+              _MethodCard(
+                iconAsset: AppImages.managerApproval,
+                title: 'Manager Approval',
+                subtitle: 'Request remote authorization',
                 onTap: () => authController.requestMobileApproval(),
               ),
             ],
@@ -108,112 +103,99 @@ class AuthMethodSelectorView extends StatelessWidget {
         return const MobileApprovalView();
     }
   }
+}
 
-  Widget _buildAuthOption(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required LinearGradient gradient,
-    required VoidCallback onTap,
-    bool recommended = false,
-  }) {
+class _MethodCard extends StatelessWidget {
+  const _MethodCard({
+    required this.iconAsset,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final String iconAsset;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  static const Color _textDark = Color(0xFF1B2335);
+  static const Color _textGrey = Color(0xFF8A93A6);
+  static const Color _border = Color(0xFFEDEFF4);
+  static const Color _chevronBg = Color(0xFFF3F5F9);
+  static const Color _chevron = Color(0xFF9AA1B0);
+
+  @override
+  Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           decoration: BoxDecoration(
-            color: AppTheme.of(context).card,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: recommended
-                  ? AppTheme.primary.withValues(alpha: 0.4)
-                  : AppTheme.of(context).cardBorder,
-            ),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _border, width: 1),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0D000000),
+                blurRadius: 14,
+                offset: Offset(0, 6),
+              ),
+            ],
           ),
           child: Row(
             children: [
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  gradient: gradient,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: gradient.colors.first.withValues(alpha: 0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Icon(icon, color: Colors.white, size: 24),
+              // Icon (PNG already has its coloured rounded-square background)
+              Image.asset(
+                iconAsset,
+                width: 48,
+                height: 48,
+                fit: BoxFit.contain,
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 14),
+
+              // Title + subtitle
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            title,
-                            style: TextStyle(
-                              color: AppTheme.of(context).textPrimary,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (recommended) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primary.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              'REC',
-                              style: TextStyle(
-                                color: AppTheme.primary,
-                                fontSize: 8,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
+                    Text(
+                      title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w600,
+                        color: _textDark,
+                      ),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       subtitle,
-                      style: TextStyle(
-                        color: AppTheme.of(context).textSecondary,
-                        fontSize: 13,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12.5,
+                        color: _textGrey,
                       ),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 10),
+
+              // Chevron
               Container(
-                width: 32,
-                height: 32,
+                width: 30,
+                height: 30,
                 decoration: BoxDecoration(
-                  color: AppTheme.of(context).cardBorder.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8),
+                  shape: BoxShape.circle,
+                  color: _chevronBg,
+                  border: Border.all(color: _border, width: 1),
                 ),
-                child: Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: AppTheme.of(context).textMuted,
-                  size: 14,
+                child: const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 20,
+                  color: _chevron,
                 ),
               ),
             ],
@@ -223,4 +205,3 @@ class AuthMethodSelectorView extends StatelessWidget {
     );
   }
 }
-

@@ -4,6 +4,7 @@ import '../../controllers/pre_trip_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_assets.dart';
 import '../general/settings_hub_view.dart';
 import 'auth_method_selector_view.dart';
 import 'vehicle_assignment_view.dart';
@@ -16,143 +17,207 @@ class PreTripFlowView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(gradient: AppTheme.of(context).backgroundGradient),
-        child: SafeArea(
-          child: Consumer<PreTripController>(
-            builder: (context, preTripController, _) {
-              return Column(
-                children: [
-                  _buildHeader(context),
-                  const SizedBox(height: 8),
-                  _buildStepIndicator(
-                    context,
-                    preTripController.activeSteps,
-                    preTripController.currentStep,
-                  ),
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 350),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      transitionBuilder: (child, animation) {
-                        return FadeTransition(
-                          opacity: animation,
-                          child: SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(0.04, 0),
-                              end: Offset.zero,
-                            ).animate(animation),
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: _buildCurrentStep(preTripController.currentStep),
-                    ),
-                  ),
-                ],
-              );
-            },
+      backgroundColor: AppTheme.of(context).card,
+      body: Column(
+        children: [
+          _buildHeader(context),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              transform: Matrix4.translationValues(0, -22, 0),
+              decoration: BoxDecoration(
+                color: AppTheme.of(context).card,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Consumer<PreTripController>(
+                builder: (context, preTripController, _) {
+                  return Column(
+                    children: [
+                      const SizedBox(height: 18),
+                      _buildStepIndicator(
+                        context,
+                        preTripController.activeSteps,
+                        preTripController.currentStep,
+                      ),
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 350),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          layoutBuilder: (currentChild, previousChildren) {
+                            return Stack(
+                              alignment: Alignment.topCenter,
+                              children: [
+                                ...previousChildren,
+                                if (currentChild != null) currentChild,
+                              ],
+                            );
+                          },
+                          transitionBuilder: (child, animation) {
+                            return FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0.04, 0),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: _buildCurrentStep(
+                              preTripController.currentStep),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+    final topPad = MediaQuery.of(context).padding.top;
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, topPad + 14, 20, 36),
+      decoration: const BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage(AppImages.appbar),
+          fit: BoxFit.cover,
+        ),
+      ),
       child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              gradient: AppTheme.primaryGradient,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.shield_rounded, color: Colors.white, size: 20),
+          // Back button
+          _circleButton(
+            icon: Icons.arrow_back_ios_new_rounded,
+            onTap: () => Navigator.of(context).maybePop(),
           ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Proximity Guard',
-                style: TextStyle(
-                  color: AppTheme.of(context).textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.2,
-                ),
-              ),
-              Text(
-                AppLocalizations.of(context).preTripVerification,
-                style: TextStyle(color: AppTheme.of(context).textSecondary, fontSize: 12),
-              ),
-            ],
-          ),
-          const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: AppTheme.success.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppTheme.success.withValues(alpha: 0.3)),
-            ),
-            child: const Row(
+          const SizedBox(width: 14),
+
+          // Title
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.circle, color: AppTheme.success, size: 7),
-                SizedBox(width: 5),
-                Text(
-                  'ONLINE',
+                const Text(
+                  'Proximity Guard',
                   style: TextStyle(
-                    color: AppTheme.success,
-                    fontSize: 9,
+                    color: Colors.white,
+                    fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 1,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  AppLocalizations.of(context).preTripVerification,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 8),
-          GestureDetector(
+
+          // Online pill
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.circle, color: AppTheme.success, size: 8),
+                SizedBox(width: 6),
+                Text(
+                  'Online',
+                  style: TextStyle(
+                    color: AppTheme.success,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+
+          // Notification / settings button (uses notification.png)
+          _circleButton(
+            iconAsset: AppImages.notification,
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const SettingsHubView()),
               );
             },
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppTheme.of(context).cardBorder.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Icon(Icons.settings_rounded, color: AppTheme.of(context).textSecondary, size: 19),
-                  if (context.watch<SettingsController>().unreadCount > 0)
-                    Positioned(
-                      top: 5,
-                      right: 5,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: AppTheme.danger,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+            showBadge: context.watch<SettingsController>().unreadCount > 0,
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _circleButton({
+    IconData? icon,
+    String? iconAsset,
+    required VoidCallback onTap,
+    bool showBadge = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 42,
+        height: 42,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            if (iconAsset != null)
+              // The PNG already includes its own circular background.
+              ClipOval(
+                child: Image.asset(
+                  iconAsset,
+                  width: 42,
+                  height: 42,
+                  fit: BoxFit.cover,
+                ),
+              )
+            else
+              Container(
+                width: 42,
+                height: 42,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: AppTheme.primary, size: 19),
+              ),
+            if (showBadge)
+              Positioned(
+                top: 7,
+                right: 7,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppTheme.danger,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -164,14 +229,8 @@ class PreTripFlowView extends StatelessWidget {
   ) {
     final currentIndex = steps.indexOf(currentStep);
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppTheme.of(context).card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.of(context).cardBorder),
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
       child: Row(
         children: List.generate(steps.length * 2 - 1, (index) {
           if (index.isOdd) {
@@ -180,10 +239,12 @@ class PreTripFlowView extends StatelessWidget {
             return Expanded(
               child: Container(
                 height: 2,
-                margin: const EdgeInsets.symmetric(horizontal: 2),
+                margin: const EdgeInsets.only(bottom: 20, left: 2, right: 2),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(1),
-                  color: isCompleted ? AppTheme.success : AppTheme.of(context).cardBorder,
+                  color: isCompleted
+                      ? AppTheme.success
+                      : AppTheme.of(context).cardBorder,
                 ),
               ),
             );
@@ -198,8 +259,8 @@ class PreTripFlowView extends StatelessWidget {
             children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
-                width: isCurrent ? 38 : 32,
-                height: isCurrent ? 38 : 32,
+                width: isCurrent ? 36 : 32,
+                height: isCurrent ? 36 : 32,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: isCompleted
@@ -207,9 +268,12 @@ class PreTripFlowView extends StatelessWidget {
                       : isCurrent
                           ? AppTheme.primaryGradient
                           : null,
-                  color: (!isCompleted && !isCurrent) ? AppTheme.of(context).card : null,
+                  color: (!isCompleted && !isCurrent)
+                      ? AppTheme.of(context).card
+                      : null,
                   border: (!isCompleted && !isCurrent)
-                      ? Border.all(color: AppTheme.of(context).cardBorder, width: 1.5)
+                      ? Border.all(
+                          color: AppTheme.of(context).cardBorder, width: 1.5)
                       : null,
                   boxShadow: isCurrent
                       ? [
@@ -222,25 +286,30 @@ class PreTripFlowView extends StatelessWidget {
                 ),
                 child: Center(
                   child: isCompleted
-                      ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+                      ? const Icon(Icons.check_rounded,
+                          size: 16, color: Colors.white)
                       : Text(
                           '${stepIndex + 1}',
                           style: TextStyle(
-                            color: isCurrent ? Colors.white : AppTheme.of(context).textMuted,
-                            fontSize: 12,
+                            color: isCurrent
+                                ? Colors.white
+                                : AppTheme.of(context).textMuted,
+                            fontSize: 13,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                 ),
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: 6),
               Text(
                 _stepLabel(context, steps[stepIndex]),
                 style: TextStyle(
-                  fontSize: 9,
+                  fontSize: 11,
                   fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400,
-                  color: isCurrent ? AppTheme.of(context).textPrimary : AppTheme.of(context).textMuted,
-                  letterSpacing: 0.3,
+                  color: isCurrent
+                      ? AppTheme.of(context).textPrimary
+                      : AppTheme.of(context).textMuted,
+                  letterSpacing: 0.2,
                 ),
               ),
             ],
