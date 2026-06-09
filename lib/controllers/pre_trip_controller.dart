@@ -9,14 +9,19 @@ enum PreTripStep {
 }
 
 class PreTripController extends ChangeNotifier {
-  // Stored once the first full registration (vehicle + inspection) is done.
-  static const _setupDoneKey = 'pre_trip_setup_done';
+  // Stores the timestamp (ms since epoch) of the last completed full setup
+  // (vehicle + inspection). Used to decide when the weekly full flow is due.
+  static const _lastSetupKey = 'pre_trip_last_setup_ms';
+
+  // How often the full (vehicle + inspection) flow must be repeated.
+  static const Duration _fullFlowEvery = Duration(days: 7);
 
   PreTripStep _currentStep = PreTripStep.authentication;
   bool _isVehicleStartAuthorized = false;
 
-  // Defaults to `true` (full flow) until prefs are read — the safe fallback.
-  bool _isFirstSetup = true;
+  // True => show the full 4-step flow. Defaults to true (safe fallback: first
+  // launch / prefs not read yet => full flow).
+  bool _needsFullSetup = true;
 
   PreTripController() {
     _loadSetupState();
@@ -24,26 +29,39 @@ class PreTripController extends ChangeNotifier {
 
   PreTripStep get currentStep => _currentStep;
   bool get isVehicleStartAuthorized => _isVehicleStartAuthorized;
-  bool get isFirstSetup => _isFirstSetup;
 
-  /// Steps actually shown for the current mode.
-  /// First registration → all 4 steps. Daily → identity + start only.
-  List<PreTripStep> get activeSteps => _isFirstSetup
+  /// True when the full vehicle + inspection flow is due (first launch, or a
+  /// week has passed since it was last completed).
+  bool get isFirstSetup => _needsFullSetup;
+
+  /// First launch / weekly refresh -> all 4 steps.
+  /// Within the week -> identity + start only.
+  List<PreTripStep> get activeSteps => _needsFullSetup
       ? PreTripStep.values
       : const [PreTripStep.authentication, PreTripStep.ready];
 
   Future<void> _loadSetupState() async {
     final prefs = await SharedPreferences.getInstance();
-    _isFirstSetup = !(prefs.getBool(_setupDoneKey) ?? false);
+    final lastMs = prefs.getInt(_lastSetupKey);
+
+    if (lastMs == null) {
+      // Never completed a full setup -> first time -> full flow.
+      _needsFullSetup = true;
+    } else {
+      final last = DateTime.fromMillisecondsSinceEpoch(lastMs);
+      final elapsed = DateTime.now().difference(last);
+      // A week (or more) has passed -> full flow is due again.
+      _needsFullSetup = elapsed >= _fullFlowEvery;
+    }
     notifyListeners();
   }
 
   void onAuthSuccess() {
-    if (_isFirstSetup) {
-      // First registration: collect vehicle + inspection.
+    if (_needsFullSetup) {
+      // First time / weekly refresh: collect vehicle + inspection.
       _currentStep = PreTripStep.vehicleAssignment;
     } else {
-      // Daily: vehicle & inspection already registered — go straight to start.
+      // Within the week: vehicle & inspection still valid -> go to start.
       _currentStep = PreTripStep.ready;
       _isVehicleStartAuthorized = true;
     }
@@ -58,21 +76,28 @@ class PreTripController extends ChangeNotifier {
   void onChecklistCompleted() {
     _currentStep = PreTripStep.ready;
     _isVehicleStartAuthorized = true;
-    // Mark registration complete for future launches. We persist it but keep
-    // the current session in full-flow mode (no mid-session step collapse);
-    // daily mode kicks in on the next app launch.
-    _persistSetupDone();
+    // Stamp "now" as the last full setup so the next full flow is due in a week.
+    _persistSetupNow();
     notifyListeners();
   }
 
-  Future<void> _persistSetupDone() async {
+  Future<void> _persistSetupNow() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_setupDoneKey, true);
+    await prefs.setInt(_lastSetupKey, DateTime.now().millisecondsSinceEpoch);
   }
 
   void reset() {
     _currentStep = PreTripStep.authentication;
     _isVehicleStartAuthorized = false;
+    notifyListeners();
+  }
+
+  /// Developer/testing helper: forget the saved setup so the next launch shows
+  /// the full vehicle + inspection flow again. (Not used by the normal flow.)
+  Future<void> forceFullSetupNextTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_lastSetupKey);
+    _needsFullSetup = true;
     notifyListeners();
   }
 }

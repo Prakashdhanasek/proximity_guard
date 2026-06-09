@@ -9,85 +9,116 @@ import 'pin_auth_view.dart';
 import 'rfid_auth_view.dart';
 import 'mobile_approval_view.dart';
 
-/// Step 1 of the pre-trip flow: "Verify your identity".
-///
-/// Icons are pulled from [AppImages]. Make sure these entries exist in
-/// app_assets.dart (adjust the names if yours differ):
-///
-///   static const String face            = 'assets/images/face.png';
-///   static const String pin             = 'assets/images/pin.png';
-///   static const String nfc             = 'assets/images/nfc.png';
-///   static const String managerApproval = 'assets/images/manager_aprroval.png';
-class AuthMethodSelectorView extends StatelessWidget {
+class AuthMethodSelectorView extends StatefulWidget {
   const AuthMethodSelectorView({super.key});
 
+  @override
+  State<AuthMethodSelectorView> createState() => _AuthMethodSelectorViewState();
+}
+
+class _AuthMethodSelectorViewState extends State<AuthMethodSelectorView> {
+  bool _autoStarted = false;
+
+  static const Color _primary = Color(0xFF3B6FE8);
   static const Color _textDark = Color(0xFF1B2335);
   static const Color _textGrey = Color(0xFF8A93A6);
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-start face verification the first time this step appears.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final auth = context.read<AuthController>();
+      if (!_autoStarted && auth.currentMethod == null) {
+        _autoStarted = true;
+        auth.authenticateWithFace();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthController>(
       builder: (context, authController, _) {
-        // Once a method is selected / running, show that method's screen.
+        // A method is active (face by default, or one the user picked) -> show it.
         if (authController.currentMethod != null) {
           return _buildActiveAuthView(authController.currentMethod!);
         }
+        // currentMethod == null -> user tapped "Choose another method" -> show list.
+        return _buildMethodList(context, authController);
+      },
+    );
+  }
 
-        return SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Verify your identity',
+  Widget _buildMethodList(BuildContext context, AuthController authController) {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Back to the default face verification screen.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                foregroundColor: _primary,
+              ),
+              onPressed: () => authController.authenticateWithFace(),
+              icon: const Icon(Icons.arrow_back_rounded, size: 18),
+              label: Text(
+                'Back to Face',
                 style: GoogleFonts.poppins(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: _textDark,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: _primary,
                 ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                'Choose a verification method to continue.',
-                style: GoogleFonts.poppins(fontSize: 14, color: _textGrey),
-              ),
-              const SizedBox(height: 20),
-
-              _MethodCard(
-                iconAsset: AppImages.face,
-                title: 'Face Recognition',
-                subtitle: 'Fast, Secure & Hands-Free',
-                onTap: () => authController.authenticateWithFace(),
-              ),
-              const SizedBox(height: 14),
-
-              _MethodCard(
-                iconAsset: AppImages.pin,
-                title: 'Security PIN',
-                subtitle: 'Enter your 4-digit code',
-                onTap: () => authController.selectMethod(AuthMethod.pin),
-              ),
-              const SizedBox(height: 14),
-
-              _MethodCard(
-                iconAsset: AppImages.nfc,
-                title: 'NFC/RFID Card',
-                subtitle: 'Tap your authorized card',
-                onTap: () => authController.authenticateWithRfid(),
-              ),
-              const SizedBox(height: 14),
-
-              _MethodCard(
-                iconAsset: AppImages.managerApproval,
-                title: 'Manager Approval',
-                subtitle: 'Request remote authorization',
-                onTap: () => authController.requestMobileApproval(),
-              ),
-            ],
+            ),
           ),
-        );
-      },
+          const SizedBox(height: 6),
+
+          Text(
+            'Verify your identity',
+            style: GoogleFonts.poppins(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: _textDark,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Choose a verification method to continue.',
+            style: GoogleFonts.poppins(fontSize: 14, color: _textGrey),
+          ),
+          const SizedBox(height: 20),
+
+          _MethodCard(
+            iconAsset: AppImages.pin,
+            title: 'Security PIN',
+            subtitle: 'Enter your 4-digit code',
+            onTap: () => authController.selectMethod(AuthMethod.pin),
+          ),
+          const SizedBox(height: 14),
+
+          _MethodCard(
+            iconAsset: AppImages.nfc,
+            title: 'NFC/RFID Card',
+            subtitle: 'Tap your authorized card',
+            onTap: () => authController.authenticateWithRfid(),
+          ),
+          const SizedBox(height: 14),
+
+          _MethodCard(
+            iconAsset: AppImages.managerApproval,
+            title: 'Manager Approval',
+            subtitle: 'Request remote authorization',
+            onTap: () => authController.requestMobileApproval(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -148,7 +179,6 @@ class _MethodCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              // Icon (PNG already has its coloured rounded-square background)
               Image.asset(
                 iconAsset,
                 width: 48,
@@ -156,8 +186,6 @@ class _MethodCard extends StatelessWidget {
                 fit: BoxFit.contain,
               ),
               const SizedBox(width: 14),
-
-              // Title + subtitle
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -182,8 +210,6 @@ class _MethodCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-
-              // Chevron
               Container(
                 width: 30,
                 height: 30,

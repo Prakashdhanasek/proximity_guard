@@ -383,12 +383,35 @@ class _FaceAuthViewState extends State<FaceAuthView> {
               const Spacer(flex: 3),
               if (status == AuthStatus.failed)
                 _buildRetrySection(context, authController)
-              else
+              else ...[
                 _buildTipsCard(),
+                const SizedBox(height: 10),
+                _buildAnotherMethodButton(context),
+              ],
             ],
           ),
         );
       },
+    );
+  }
+
+  // ── "Choose another method": resets auth so the method list shows ───────────
+  // FaceAuthView is shown by AuthMethodSelectorView when currentMethod == face.
+  // Calling reset() sets currentMethod = null, so the selector rebuilds and
+  // displays the Face / Security PIN / NFC-RFID / Manager Approval options.
+  Widget _buildAnotherMethodButton(BuildContext context) {
+    return TextButton.icon(
+      onPressed: () => context.read<AuthController>().reset(),
+      icon: const Icon(Icons.swap_horiz_rounded,
+          size: 18, color: AppTheme.primary),
+      label: Text(
+        'Choose another method',
+        style: GoogleFonts.poppins(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: AppTheme.primary,
+        ),
+      ),
     );
   }
 

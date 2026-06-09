@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/pre_trip_controller.dart';
-import '../../controllers/settings_controller.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
-import '../theme/app_assets.dart';
-import '../general/settings_hub_view.dart';
 import 'auth_method_selector_view.dart';
 import 'vehicle_assignment_view.dart';
 import 'checklist_view.dart';
 import 'ready_to_start_view.dart';
 
+/// Pre-trip flow WITHOUT the blue app-bar header. The verification screens
+/// (Identity / Vehicle / Inspect / Start) are clean and full; the branded
+/// header only appears later, after the ride starts (DrivingHudView).
 class PreTripFlowView extends StatelessWidget {
   const PreTripFlowView({super.key});
 
@@ -18,205 +18,49 @@ class PreTripFlowView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.of(context).card,
-      body: Column(
-        children: [
-          _buildHeader(context),
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              transform: Matrix4.translationValues(0, -22, 0),
-              decoration: BoxDecoration(
-                color: AppTheme.of(context).card,
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Consumer<PreTripController>(
-                builder: (context, preTripController, _) {
-                  return Column(
-                    children: [
-                      const SizedBox(height: 18),
-                      _buildStepIndicator(
-                        context,
-                        preTripController.activeSteps,
-                        preTripController.currentStep,
-                      ),
-                      Expanded(
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 350),
-                          switchInCurve: Curves.easeOutCubic,
-                          switchOutCurve: Curves.easeInCubic,
-                          layoutBuilder: (currentChild, previousChildren) {
-                            return Stack(
-                              alignment: Alignment.topCenter,
-                              children: [
-                                ...previousChildren,
-                                if (currentChild != null) currentChild,
-                              ],
-                            );
-                          },
-                          transitionBuilder: (child, animation) {
-                            return FadeTransition(
-                              opacity: animation,
-                              child: SlideTransition(
-                                position: Tween<Offset>(
-                                  begin: const Offset(0.04, 0),
-                                  end: Offset.zero,
-                                ).animate(animation),
-                                child: child,
-                              ),
-                            );
-                          },
-                          child: _buildCurrentStep(
-                              preTripController.currentStep),
+      body: SafeArea(
+        child: Consumer<PreTripController>(
+          builder: (context, preTripController, _) {
+            return Column(
+              children: [
+                const SizedBox(height: 16),
+                _buildStepIndicator(
+                  context,
+                  preTripController.activeSteps,
+                  preTripController.currentStep,
+                ),
+                Expanded(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 350),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    layoutBuilder: (currentChild, previousChildren) {
+                      return Stack(
+                        alignment: Alignment.topCenter,
+                        children: [
+                          ...previousChildren,
+                          if (currentChild != null) currentChild,
+                        ],
+                      );
+                    },
+                    transitionBuilder: (child, animation) {
+                      return FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0.04, 0),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
                         ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    final topPad = MediaQuery.of(context).padding.top;
-    return Container(
-      padding: EdgeInsets.fromLTRB(20, topPad + 14, 20, 36),
-      decoration: const BoxDecoration(
-        image: DecorationImage(
-          image: AssetImage(AppImages.appbar),
-          fit: BoxFit.cover,
-        ),
-      ),
-      child: Row(
-        children: [
-          // Back button
-          _circleButton(
-            icon: Icons.arrow_back_ios_new_rounded,
-            onTap: () => Navigator.of(context).maybePop(),
-          ),
-          const SizedBox(width: 14),
-
-          // Title
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Proximity Guard',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  AppLocalizations.of(context).preTripVerification,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
+                      );
+                    },
+                    child: _buildCurrentStep(preTripController.currentStep),
                   ),
                 ),
               ],
-            ),
-          ),
-          const SizedBox(width: 8),
-
-          // Online pill
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.circle, color: AppTheme.success, size: 8),
-                SizedBox(width: 6),
-                Text(
-                  'Online',
-                  style: TextStyle(
-                    color: AppTheme.success,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-
-          // Notification / settings button (uses notification.png)
-          _circleButton(
-            iconAsset: AppImages.notification,
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsHubView()),
-              );
-            },
-            showBadge: context.watch<SettingsController>().unreadCount > 0,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _circleButton({
-    IconData? icon,
-    String? iconAsset,
-    required VoidCallback onTap,
-    bool showBadge = false,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: 42,
-        height: 42,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            if (iconAsset != null)
-              // The PNG already includes its own circular background.
-              ClipOval(
-                child: Image.asset(
-                  iconAsset,
-                  width: 42,
-                  height: 42,
-                  fit: BoxFit.cover,
-                ),
-              )
-            else
-              Container(
-                width: 42,
-                height: 42,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: AppTheme.primary, size: 19),
-              ),
-            if (showBadge)
-              Positioned(
-                top: 7,
-                right: 7,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppTheme.danger,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-          ],
+            );
+          },
         ),
       ),
     );
