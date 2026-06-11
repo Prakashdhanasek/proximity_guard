@@ -89,18 +89,19 @@ class PrivacyControlsView extends StatelessWidget {
     BuildContext context,
     SettingsController settings,
   ) {
+    final l = AppLocalizations.of(context);
     final templates = settings.biometricTemplates;
 
     return _card(
       context: context,
-      title: 'Biometric Templates',
+      title: l.biometricTemplates,
       icon: Icons.fingerprint_rounded,
       children: [
         if (templates.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(
-              'No biometric data stored',
+              l.noBiometricData,
               style: GoogleFonts.poppins(
                 color: AppTheme.of(context).textMuted,
                 fontSize: 13,
@@ -110,7 +111,7 @@ class PrivacyControlsView extends StatelessWidget {
         ...templates.map((t) => _templateRow(context, t, settings)),
         const SizedBox(height: 8),
         Text(
-          'Biometric templates are encrypted and stored securely on-device.',
+          l.biometricEncryptedNote,
           style: GoogleFonts.poppins(
             color: AppTheme.of(context).textMuted,
             fontSize: 11,
@@ -125,10 +126,11 @@ class PrivacyControlsView extends StatelessWidget {
     BiometricTemplate t,
     SettingsController settings,
   ) {
+    final l = AppLocalizations.of(context);
     final label = switch (t.type) {
-      BiometricType.face => 'Face Recognition',
-      BiometricType.fingerprint => 'Fingerprint',
-      BiometricType.voice => 'Voice Print',
+      BiometricType.face => l.faceRecognition,
+      BiometricType.fingerprint => l.fingerprint,
+      BiometricType.voice => l.voicePrint,
     };
     final icon = switch (t.type) {
       BiometricType.face => Icons.face_rounded,
@@ -160,7 +162,7 @@ class PrivacyControlsView extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Enrolled ${_formatDate(t.enrolledAt)}',
+                  '${l.enrolled} ${_formatDate(context, t.enrolledAt)}',
                   style: GoogleFonts.poppins(
                     color: AppTheme.of(context).textMuted,
                     fontSize: 11,
@@ -178,7 +180,7 @@ class PrivacyControlsView extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                'Delete',
+                l.deleteWord,
                 style: GoogleFonts.poppins(
                   color: AppTheme.danger,
                   fontSize: 11,
@@ -193,15 +195,16 @@ class PrivacyControlsView extends StatelessWidget {
   }
 
   Widget _consentCard(BuildContext context, SettingsController settings) {
+    final l = AppLocalizations.of(context);
     return _card(
       context: context,
-      title: 'Consent Management',
+      title: l.consentManagement,
       icon: Icons.verified_user_rounded,
       children: [
         _toggleRow(
           context: context,
-          label: 'Data Collection Consent',
-          subtitle: 'Allow collection of driving data for safety analysis',
+          label: l.dataCollectionConsent,
+          subtitle: l.dataCollectionConsentSub,
           value: settings.consentGiven,
           onChanged: (v) => settings.toggleConsent(v),
         ),
@@ -209,28 +212,28 @@ class PrivacyControlsView extends StatelessWidget {
         _infoTile(
           context: context,
           icon: Icons.info_outline_rounded,
-          text:
-              'Your data is processed in accordance with GDPR, DPDPA, and local privacy regulations.',
+          text: l.privacyRegulationNote,
         ),
       ],
     );
   }
 
   Widget _dataManagementCard(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return _card(
       context: context,
-      title: 'Data Management',
+      title: l.dataManagement,
       icon: Icons.storage_rounded,
       children: [
         _actionRow(
           context: context,
           icon: Icons.download_rounded,
           color: AppTheme.primary,
-          label: 'Export My Data',
-          subtitle: 'Download all stored personal data',
+          label: l.exportMyData,
+          subtitle: l.exportMyDataSub,
           onTap: () => _showSnack(
             context,
-            'Data export requested. You will be notified when ready.',
+            l.exportRequestedSnack,
           ),
         ),
         const SizedBox(height: 6),
@@ -238,8 +241,8 @@ class PrivacyControlsView extends StatelessWidget {
           context: context,
           icon: Icons.delete_forever_rounded,
           color: AppTheme.danger,
-          label: 'Delete All Data',
-          subtitle: 'Permanently remove all personal data',
+          label: l.deleteAllData,
+          subtitle: l.deleteAllDataSub,
           onTap: () => _showDeleteAllDialog(context),
         ),
       ],
@@ -412,10 +415,11 @@ class PrivacyControlsView extends StatelessWidget {
     BiometricTemplate t,
     SettingsController settings,
   ) {
+    final l = AppLocalizations.of(context);
     final label = switch (t.type) {
-      BiometricType.face => 'Face Recognition',
-      BiometricType.fingerprint => 'Fingerprint',
-      BiometricType.voice => 'Voice Print',
+      BiometricType.face => l.faceRecognition,
+      BiometricType.fingerprint => l.fingerprint,
+      BiometricType.voice => l.voicePrint,
     };
 
     showDialog(
@@ -423,11 +427,11 @@ class PrivacyControlsView extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
-          'Delete $label?',
+          '${l.deleteWord} $label?',
           style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700),
         ),
         content: Text(
-          'This will permanently remove this biometric template. You will need to re-enroll.',
+          l.deleteTemplateBody,
           style: GoogleFonts.poppins(
             fontSize: 11,
             color: AppTheme.of(context).textSecondary,
@@ -438,7 +442,7 @@ class PrivacyControlsView extends StatelessWidget {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: Text(
-              'Cancel',
+              l.cancel,
               style: GoogleFonts.poppins(
                 color: AppTheme.of(context).textMuted,
                 fontSize: 12,
@@ -451,7 +455,7 @@ class PrivacyControlsView extends StatelessWidget {
               Navigator.of(ctx).pop();
             },
             child: Text(
-              'Delete',
+              l.deleteWord,
               style: GoogleFonts.poppins(
                 color: AppTheme.danger,
                 fontSize: 12,
@@ -465,12 +469,13 @@ class PrivacyControlsView extends StatelessWidget {
   }
 
   void _showDeleteAllDialog(BuildContext context) {
+    final l = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
-          'Delete All Data?',
+          '${l.deleteAllData}?',
           style: GoogleFonts.poppins(
             fontSize: 15,
             fontWeight: FontWeight.w700,
@@ -478,7 +483,7 @@ class PrivacyControlsView extends StatelessWidget {
           ),
         ),
         content: Text(
-          'This will permanently remove all personal data including biometrics, trip history, and preferences. This action cannot be undone.',
+          l.deleteAllDataBody,
           style: GoogleFonts.poppins(
             fontSize: 11,
             color: AppTheme.of(context).textSecondary,
@@ -489,7 +494,7 @@ class PrivacyControlsView extends StatelessWidget {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: Text(
-              'Cancel',
+              l.cancel,
               style: GoogleFonts.poppins(
                 color: AppTheme.of(context).textMuted,
                 fontSize: 12,
@@ -499,10 +504,10 @@ class PrivacyControlsView extends StatelessWidget {
           TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
-              _showSnack(context, 'Data deletion request submitted.');
+              _showSnack(context, l.dataDeletionSnack);
             },
             child: Text(
-              'Delete Everything',
+              l.deleteEverything,
               style: GoogleFonts.poppins(
                 color: AppTheme.danger,
                 fontSize: 12,
@@ -515,21 +520,8 @@ class PrivacyControlsView extends StatelessWidget {
     );
   }
 
-  String _formatDate(DateTime d) {
-    final months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
+  String _formatDate(BuildContext context, DateTime d) {
+    final months = AppLocalizations.of(context).monthsShort.split('|');
     return '${d.day} ${months[d.month - 1]}, ${d.year}';
   }
 

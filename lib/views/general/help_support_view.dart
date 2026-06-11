@@ -8,6 +8,7 @@ class HelpSupportView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -32,44 +33,20 @@ class HelpSupportView extends StatelessWidget {
                       const SizedBox(height: 18),
 
                       // FAQs
-                      _sectionLabel(context, 'Frequently Asked Questions'),
+                      _sectionLabel(context, l.faqTitle),
                       const SizedBox(height: 8),
                       _faqCard(context, [
-                        _faqItem(
-                          context,
-                          'How does face authentication work?',
-                          'The app uses your device camera to verify your identity through facial recognition. A liveness check ensures the system cannot be fooled by photos.',
-                        ),
-                        _faqItem(
-                          context,
-                          'What triggers a safety alert?',
-                          'Alerts are triggered by: following too closely, exceeding speed limits, detected drowsiness (eye closure), phone distraction, and geofence breaches.',
-                        ),
-                        _faqItem(
-                          context,
-                          'How is my safety score calculated?',
-                          'Your score (0-100) is based on four factors: following distance compliance (30%), speed compliance (30%), alert response (20%), and attentiveness (20%).',
-                        ),
-                        _faqItem(
-                          context,
-                          'Can I delete my biometric data?',
-                          'Yes. Go to Settings → Privacy Controls → Biometric Templates and tap Delete on any enrolled template.',
-                        ),
-                        _faqItem(
-                          context,
-                          'What happens if my device loses connection?',
-                          'The app continues monitoring locally. Data syncs automatically when connectivity is restored.',
-                        ),
-                        _faqItem(
-                          context,
-                          'How do I change the display language?',
-                          'Go to Settings → Preferences → Language and select from the available options.',
-                        ),
+                        _faqItem(context, l.faq1Q, l.faq1A),
+                        _faqItem(context, l.faq2Q, l.faq2A),
+                        _faqItem(context, l.faq3Q, l.faq3A),
+                        _faqItem(context, l.faq4Q, l.faq4A),
+                        _faqItem(context, l.faq5Q, l.faq5A),
+                        _faqItem(context, l.faq6Q, l.faq6A),
                       ]),
                       const SizedBox(height: 18),
 
                       // Contact
-                      _sectionLabel(context, 'Contact'),
+                      _sectionLabel(context, l.contactLabel),
                       const SizedBox(height: 8),
                       _contactCard(context),
                     ],
@@ -119,30 +96,31 @@ class HelpSupportView extends StatelessWidget {
   }
 
   Widget _quickActions(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Row(
       children: [
         _actionCard(
           context: context,
           icon: Icons.bug_report_rounded,
           color: AppTheme.danger,
-          label: 'Report Issue',
-          onTap: () => _showSnack(context, 'Issue report form will open.'),
+          label: l.reportIssue,
+          onTap: () => _showSnack(context, l.reportIssueSnack),
         ),
         const SizedBox(width: 10),
         _actionCard(
           context: context,
           icon: Icons.headset_mic_rounded,
           color: AppTheme.primary,
-          label: 'Contact Manager',
-          onTap: () => _showSnack(context, 'Contacting fleet manager...'),
+          label: l.contactManager,
+          onTap: () => _showSnack(context, l.contactManagerSnack),
         ),
         const SizedBox(width: 10),
         _actionCard(
           context: context,
           icon: Icons.chat_rounded,
           color: AppTheme.success,
-          label: 'Live Chat',
-          onTap: () => _showSnack(context, 'Chat support coming soon.'),
+          label: l.liveChat,
+          onTap: () => _showSnack(context, l.liveChatSnack),
         ),
       ],
     );
@@ -186,6 +164,7 @@ class HelpSupportView extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 label,
+                textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   color: AppTheme.of(context).textPrimary,
                   fontSize: 12,
@@ -268,6 +247,7 @@ class HelpSupportView extends StatelessWidget {
   }
 
   Widget _contactCard(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -288,7 +268,7 @@ class HelpSupportView extends StatelessWidget {
           const Divider(height: 16, color: Color(0xFFF1F5F9)),
           _contactRow(context, Icons.phone_rounded, '+91 44 2830 XXXX'),
           const Divider(height: 16, color: Color(0xFFF1F5F9)),
-          _contactRow(context, Icons.schedule_rounded, 'Mon–Sat, 9:00 AM – 6:00 PM IST'),
+          _contactRow(context, Icons.schedule_rounded, l.supportHours),
         ],
       ),
     );

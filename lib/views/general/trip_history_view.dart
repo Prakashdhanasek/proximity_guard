@@ -152,7 +152,7 @@ class TripHistoryView extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      trip.routeName,
+                      _localizedRoute(context, trip.routeName),
                       style: GoogleFonts.poppins(
                         color: AppTheme.of(context).textPrimary,
                         fontSize: 14,
@@ -161,7 +161,7 @@ class TripHistoryView extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      trip.formattedDate,
+                      _formatDate(context, trip.date),
                       style: GoogleFonts.poppins(
                         color: AppTheme.of(context).textMuted,
                         fontSize: 11,
@@ -237,6 +237,29 @@ class TripHistoryView extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  // Localize the mock route names (falls back to raw value for any other route)
+  String _localizedRoute(BuildContext context, String route) {
+    final l = AppLocalizations.of(context);
+    switch (route) {
+      case 'Warehouse → Delivery Hub':
+        return l.routeWarehouse;
+      case 'Depot A → Client Site':
+        return l.routeDepot;
+      case 'Hub-B → Distribution Center':
+        return l.routeHubB;
+      case 'Factory → Port Terminal':
+        return l.routeFactory;
+      default:
+        return route;
+    }
+  }
+
+  // Localized date using the shared monthsShort list
+  String _formatDate(BuildContext context, DateTime d) {
+    final months = AppLocalizations.of(context).monthsShort.split('|');
+    return '${d.day} ${months[d.month - 1]}, ${d.year}';
   }
 
   Color _scoreColor(int score) {

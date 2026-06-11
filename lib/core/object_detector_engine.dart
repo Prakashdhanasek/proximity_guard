@@ -1,12 +1,3 @@
-// lib/core/object_detector_engine.dart
-// YOLOv8 Object Detection via tflite_flutter
-// Detects: cell phone, foods (banana, apple, sandwich, etc.), drinks (bottle, cup, wine glass)
-//
-// KEY FIXES vs v1:
-// 1. Confidence threshold lowered to 0.35 (from 0.60) — phone held sideways often gets 0.40–0.55
-// 2. Full IoU-based Non-Maximum Suppression (NMS) to eliminate duplicate boxes
-// 3. Front-camera horizontal mirror flip applied before writing into input buffer
-
 import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';

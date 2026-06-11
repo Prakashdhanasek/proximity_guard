@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:proximity_guard/l10n/name_localisor.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/pre_trip_controller.dart';
 import '../../models/auth_result_model.dart';
+import '../../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 
 class MobileApprovalView extends StatelessWidget {
@@ -10,6 +12,7 @@ class MobileApprovalView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Consumer<AuthController>(
       builder: (context, authController, _) {
         return Padding(
@@ -20,7 +23,7 @@ class MobileApprovalView extends StatelessWidget {
               _buildStatusVisual(authController.status),
               const SizedBox(height: 28),
               Text(
-                _getTitle(authController.status),
+                _getTitle(context, authController.status),
                 style: TextStyle(
                   color: authController.status == AuthStatus.success
                       ? AppTheme.accent
@@ -49,7 +52,7 @@ class MobileApprovalView extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    authController.authenticatedDriver!.name,
+                    localizedName(authController.authenticatedDriver!.name, l.locale),
                     style: const TextStyle(color: AppTheme.accent, fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -57,7 +60,7 @@ class MobileApprovalView extends StatelessWidget {
               const Spacer(flex: 1),
               if (authController.status == AuthStatus.success)
                 AppTheme.gradientButton(
-                  label: 'Continue',
+                  label: l.continueLabel,
                   icon: Icons.arrow_forward_rounded,
                   onPressed: () => context.read<PreTripController>().onAuthSuccess(),
                 )
@@ -65,7 +68,7 @@ class MobileApprovalView extends StatelessWidget {
                 TextButton.icon(
                   onPressed: () => authController.reset(),
                   icon: Icon(Icons.close_rounded, size: 16, color: AppTheme.of(context).textSecondary),
-                  label: Text('Cancel Request', style: TextStyle(color: AppTheme.of(context).textSecondary)),
+                  label: Text(l.cancelRequest, style: TextStyle(color: AppTheme.of(context).textSecondary)),
                 ),
               const SizedBox(height: 24),
             ],
@@ -132,20 +135,22 @@ class MobileApprovalView extends StatelessWidget {
     );
   }
 
-  String _getTitle(AuthStatus status) {
+  String _getTitle(BuildContext context, AuthStatus status) {
+    final l = AppLocalizations.of(context);
     switch (status) {
       case AuthStatus.awaitingApproval:
-        return 'Awaiting Approval';
+        return l.awaitingApproval;
       case AuthStatus.success:
-        return 'Access Approved';
+        return l.accessApproved;
       case AuthStatus.failed:
-        return 'Request Denied';
+        return l.requestDenied;
       default:
-        return 'Manager Approval';
+        return l.managerApproval;
     }
   }
 
   Widget _buildApprovalCard(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -155,11 +160,11 @@ class MobileApprovalView extends StatelessWidget {
       ),
       child: Column(
         children: [
-          _buildDetailRow(context, Icons.person_outline_rounded, 'Manager', 'Suresh M.'),
+          _buildDetailRow(context, Icons.person_outline_rounded, l.manager, 'Suresh M.'),
           Divider(color: AppTheme.of(context).cardBorder, height: 24),
-          _buildDetailRow(context, Icons.directions_car_outlined, 'Vehicle', 'TN 38 AB 1234'),
+          _buildDetailRow(context, Icons.directions_car_outlined, l.vehicle, 'TN 38 AB 1234'),
           Divider(color: AppTheme.of(context).cardBorder, height: 24),
-          _buildDetailRow(context, Icons.access_time_rounded, 'Requested', _currentTime()),
+          _buildDetailRow(context, Icons.access_time_rounded, l.requested, _currentTime()),
         ],
       ),
     );

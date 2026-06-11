@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:proximity_guard/l10n/name_localisor.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../l10n/app_localizations.dart';
@@ -12,6 +13,7 @@ class ProfileView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final driver = context.read<AuthController>().authenticatedDriver;
     final templates = context.watch<SettingsController>().biometricTemplates;
 
@@ -83,7 +85,7 @@ class ProfileView extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        driver?.name ?? 'Driver',
+                        localizedName(driver?.name ?? l.driver, l.locale),
                         style: GoogleFonts.poppins(
                           color: AppTheme.of(context).textPrimary,
                           fontSize: 17,
@@ -102,15 +104,15 @@ class ProfileView extends StatelessWidget {
                       // License info card
                       _card(
                         context,
-                        title: 'License Information',
+                        title: l.licenseInformation,
                         icon: Icons.badge_rounded,
                         children: [
-                          _infoRow(context, 'License No.', driver?.licenseNumber ?? '—'),
-                          _infoRow(context, 'RFID Tag', driver?.rfidTag ?? '—'),
+                          _infoRow(context, l.licenseNo, driver?.licenseNumber ?? '—'),
+                          _infoRow(context, l.rfidTag, driver?.rfidTag ?? '—'),
                           _infoRow(
                             context,
-                            'Status',
-                            'Active',
+                            l.statusLabel,
+                            l.activeStatus,
                             valueColor: AppTheme.success,
                           ),
                         ],
@@ -120,14 +122,14 @@ class ProfileView extends StatelessWidget {
                       // Biometrics status
                       _card(
                         context,
-                        title: 'Enrolled Biometrics',
+                        title: l.enrolledBiometrics,
                         icon: Icons.fingerprint_rounded,
                         children: [
                           if (templates.isEmpty)
                             Padding(
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               child: Text(
-                                'No biometrics enrolled',
+                                l.noBiometricsEnrolled,
                                 style: GoogleFonts.poppins(
                                   color: AppTheme.of(context).textMuted,
                                   fontSize: 13,
@@ -142,12 +144,12 @@ class ProfileView extends StatelessWidget {
                       // Vehicle assignment
                       _card(
                         context,
-                        title: 'Current Vehicle',
+                        title: l.currentVehicle,
                         icon: Icons.directions_car_rounded,
                         children: [
-                          _infoRow(context, 'Vehicle', 'TN-38-AB-1234'),
-                          _infoRow(context, 'Type', 'Cargo Van'),
-                          _infoRow(context, 'Fleet', 'Chennai Metro Fleet'),
+                          _infoRow(context, l.vehicle, 'TN-38-AB-1234'),
+                          _infoRow(context, l.typeLabel, l.vehicleTypeVan),
+                          _infoRow(context, l.fleet, 'Chennai Metro Fleet'),
                         ],
                       ),
                     ],
@@ -265,10 +267,11 @@ class ProfileView extends StatelessWidget {
   }
 
   Widget _biometricRow(BuildContext context, BiometricTemplate t) {
+    final l = AppLocalizations.of(context);
     final label = switch (t.type) {
-      BiometricType.face => 'Face Recognition',
-      BiometricType.fingerprint => 'Fingerprint',
-      BiometricType.voice => 'Voice Print',
+      BiometricType.face => l.faceRecognition,
+      BiometricType.fingerprint => l.fingerprint,
+      BiometricType.voice => l.voicePrint,
     };
     final icon = switch (t.type) {
       BiometricType.face => Icons.face_rounded,
@@ -295,7 +298,7 @@ class ProfileView extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Enrolled',
+                  l.enrolled,
                   style: GoogleFonts.poppins(
                     color: AppTheme.success,
                     fontSize: 11,
@@ -312,7 +315,7 @@ class ProfileView extends StatelessWidget {
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
-              'Active',
+              l.activeStatus,
               style: GoogleFonts.poppins(
                 color: AppTheme.success,
                 fontSize: 11,

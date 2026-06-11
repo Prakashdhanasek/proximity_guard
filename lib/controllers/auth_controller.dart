@@ -34,11 +34,7 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Face Authentication (REAL camera) ──────────────────────────────────────
-  // CHANGED: This no longer fakes a success. It only opens the live face screen
-  // by putting auth into the "inProgress" state. The actual decision is driven
-  // by the on-device MobileFaceNet match inside FaceAuthView, which then calls
-  // completeFaceAuth() or failFaceAuth() below.
+ 
   Future<void> authenticateWithFace() async {
     _status = AuthStatus.inProgress;
     _currentMethod = AuthMethod.face;
@@ -46,10 +42,6 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Called by FaceAuthView when the live camera face matches an enrolled
-  /// reference face (MobileFaceNet L2 distance below threshold).
-  /// [driverName] is the matched reference person's name (e.g. 'Rohit'); when
-  /// null, the default mock name is kept.
   void completeFaceAuth({String? driverName, String? driverId}) {
     _status = AuthStatus.success;
     _currentMethod = AuthMethod.face;

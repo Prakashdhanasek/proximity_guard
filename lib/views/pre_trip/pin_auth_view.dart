@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:proximity_guard/l10n/name_localisor.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/pre_trip_controller.dart';
 import '../../models/auth_result_model.dart';
+import '../../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 
 class PinAuthView extends StatefulWidget {
@@ -36,6 +38,7 @@ class _PinAuthViewState extends State<PinAuthView> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Consumer<AuthController>(
       builder: (context, authController, _) {
         if (authController.status == AuthStatus.success) {
@@ -58,7 +61,7 @@ class _PinAuthViewState extends State<PinAuthView> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Enter Security PIN',
+                l.enterSecurityPin,
                 style: TextStyle(
                   color: AppTheme.of(context).textPrimary,
                   fontSize: 22,
@@ -67,7 +70,7 @@ class _PinAuthViewState extends State<PinAuthView> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Enter your 4-digit verification code',
+                l.enterPinCode,
                 style: TextStyle(color: AppTheme.of(context).textSecondary, fontSize: 14),
               ),
               const SizedBox(height: 28),
@@ -92,7 +95,7 @@ class _PinAuthViewState extends State<PinAuthView> {
               TextButton.icon(
                 onPressed: () => authController.reset(),
                 icon: Icon(Icons.arrow_back_rounded, size: 16, color: AppTheme.of(context).textSecondary),
-                label: Text('Choose another method',
+                label: Text(l.chooseAnotherMethod,
                     style: TextStyle(color: AppTheme.of(context).textSecondary, fontSize: 13)),
               ),
             ],
@@ -200,6 +203,7 @@ class _PinAuthViewState extends State<PinAuthView> {
   }
 
   Widget _buildSuccess(BuildContext context, AuthController controller) {
+    final l = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -216,7 +220,7 @@ class _PinAuthViewState extends State<PinAuthView> {
           ),
           const SizedBox(height: 24),
           Text(
-            'PIN Verified',
+            l.pinVerified,
             style: TextStyle(color: AppTheme.of(context).textPrimary, fontSize: 24, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
@@ -227,13 +231,13 @@ class _PinAuthViewState extends State<PinAuthView> {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              controller.authenticatedDriver?.name ?? 'Driver',
+              localizedName(controller.authenticatedDriver?.name ?? l.driver, l.locale),
               style: const TextStyle(color: AppTheme.accent, fontSize: 16, fontWeight: FontWeight.w600),
             ),
           ),
           const SizedBox(height: 36),
           AppTheme.gradientButton(
-            label: 'Continue',
+            label: l.continueLabel,
             icon: Icons.arrow_forward_rounded,
             onPressed: () => context.read<PreTripController>().onAuthSuccess(),
           ),

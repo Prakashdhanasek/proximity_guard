@@ -196,7 +196,7 @@ class NotificationCenterView extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          n.title,
+                          _notifTitle(context, n),
                           style: GoogleFonts.poppins(
                             color: AppTheme.of(context).textPrimary,
                             fontSize: 13,
@@ -207,7 +207,7 @@ class NotificationCenterView extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        n.timeAgo,
+                        _timeAgo(context, n.timestamp),
                         style: GoogleFonts.poppins(
                           color: AppTheme.of(context).textMuted,
                           fontSize: 11,
@@ -217,7 +217,7 @@ class NotificationCenterView extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    n.message,
+                    _notifMsg(context, n),
                     style: GoogleFonts.poppins(
                       color: AppTheme.of(context).textSecondary,
                       fontSize: 12,
@@ -243,6 +243,63 @@ class NotificationCenterView extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  // Localize the mock notifications by id (live ones fall back to stored text)
+  String _notifTitle(BuildContext context, NotificationModel n) {
+    final l = AppLocalizations.of(context);
+    switch (n.id) {
+      case '1':
+        return l.notif1Title;
+      case '2':
+        return l.notif2Title;
+      case '3':
+        return l.notif3Title;
+      case '4':
+        return l.notif4Title;
+      case '5':
+        return l.notif5Title;
+      case '6':
+        return l.notif6Title;
+      default:
+        return n.title;
+    }
+  }
+
+  String _notifMsg(BuildContext context, NotificationModel n) {
+    final l = AppLocalizations.of(context);
+    switch (n.id) {
+      case '1':
+        return l.notif1Msg;
+      case '2':
+        return l.notif2Msg;
+      case '3':
+        return l.notif3Msg;
+      case '4':
+        return l.notif4Msg;
+      case '5':
+        return l.notif5Msg;
+      case '6':
+        return l.notif6Msg;
+      default:
+        return n.message;
+    }
+  }
+
+  // Localized relative time computed from the timestamp
+  String _timeAgo(BuildContext context, DateTime ts) {
+    final l = AppLocalizations.of(context);
+    final diff = DateTime.now().difference(ts);
+    if (diff.inDays > 0) {
+      return l.timeDaysAgo.replaceAll('{n}', '${diff.inDays}');
+    }
+    if (diff.inHours > 0) {
+      return l.timeHoursAgo.replaceAll('{n}', '${diff.inHours}');
+    }
+    if (diff.inMinutes > 0) {
+      return l.timeMinAgo.replaceAll('{n}', '${diff.inMinutes}');
+    }
+    return l.timeJustNow;
   }
 
   Color _typeColor(BuildContext context, NotificationType type) {

@@ -15,7 +15,6 @@ class VehicleAssignmentView extends StatefulWidget {
 }
 
 class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
-  // Palette (matches the mock)
   static const Color _textDark = Color(0xFF1B2335);
   static const Color _textGrey = Color(0xFF8A93A6);
   static const Color _cardBorder = Color(0xFFEDEFF4);
@@ -31,6 +30,7 @@ class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Consumer<VehicleController>(
       builder: (context, vehicleController, _) {
         if (vehicleController.isLoading) {
@@ -42,7 +42,7 @@ class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
                     color: AppTheme.primary, strokeWidth: 2.5),
                 const SizedBox(height: 16),
                 Text(
-                  AppLocalizations.of(context).loadingVehicle,
+                  l.loadingVehicle,
                   style: GoogleFonts.poppins(color: _textGrey),
                 ),
               ],
@@ -54,7 +54,7 @@ class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
         if (vehicle == null) {
           return Center(
             child: Text(
-              AppLocalizations.of(context).noVehicleAssigned,
+              l.noVehicleAssigned,
               style: GoogleFonts.poppins(color: _textGrey),
             ),
           );
@@ -66,7 +66,7 @@ class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                AppLocalizations.of(context).yourVehicle,
+                l.yourVehicle,
                 style: GoogleFonts.poppins(
                   color: _textDark,
                   fontSize: 22,
@@ -75,14 +75,14 @@ class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
               ),
               const SizedBox(height: 6),
               Text(
-                AppLocalizations.of(context).confirmVehicle,
+                l.confirmVehicle,
                 style: GoogleFonts.poppins(color: _textGrey, fontSize: 14),
               ),
               const SizedBox(height: 20),
-              _buildVehicleCard(vehicle),
+              _buildVehicleCard(context, vehicle),
               const Spacer(),
               AppTheme.gradientButton(
-                label: AppLocalizations.of(context).confirmContinue,
+                label: l.confirmContinue,
                 icon: Icons.arrow_forward_rounded,
                 onPressed: () =>
                     context.read<PreTripController>().onVehicleConfirmed(),
@@ -94,7 +94,8 @@ class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
     );
   }
 
-  Widget _buildVehicleCard(dynamic vehicle) {
+  Widget _buildVehicleCard(BuildContext context, dynamic vehicle) {
+    final l = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -111,11 +112,10 @@ class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
       ),
       child: Column(
         children: [
-          // ── Header row ──
           Row(
             children: [
               Text(
-                'Your Assigned Vehicle',
+                l.yourAssignedVehicle,
                 style: GoogleFonts.poppins(
                   color: _textDark,
                   fontSize: 15,
@@ -124,14 +124,13 @@ class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
               ),
               const Spacer(),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                 decoration: BoxDecoration(
                   color: AppTheme.success.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  'Today',
+                  l.today,
                   style: GoogleFonts.poppins(
                     color: AppTheme.success,
                     fontSize: 12,
@@ -142,8 +141,6 @@ class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
             ],
           ),
           const SizedBox(height: 16),
-
-          // ── Image + details ──
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -168,17 +165,15 @@ class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Year: ${vehicle.year}',
+                      '${l.year}: ${vehicle.year}',
                       style: GoogleFonts.poppins(
                         color: _textGrey,
                         fontSize: 13,
                       ),
                     ),
                     const SizedBox(height: 10),
-                    // Number plate
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 9),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(8),
@@ -200,31 +195,16 @@ class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
             ],
           ),
           const SizedBox(height: 16),
-
           Divider(color: _cardBorder, height: 1, thickness: 1),
           const SizedBox(height: 14),
-
-          // ── Fleet / Vehicle ID / Status ──
           Row(
             children: [
-              _infoCol(
-                Icons.local_shipping_outlined,
-                'Fleet',
-                vehicle.fleetId,
-              ),
+              _infoCol(Icons.local_shipping_outlined, l.fleet, vehicle.fleetId),
               _vDivider(),
-              _infoCol(
-                Icons.description_outlined,
-                'Vehicle ID',
-                vehicle.id,
-              ),
+              _infoCol(Icons.description_outlined, l.vehicleId, vehicle.id),
               _vDivider(),
-              _infoCol(
-                Icons.speed_outlined,
-                'Status',
-                'Ready',
-                valueColor: AppTheme.success,
-              ),
+              _infoCol(Icons.speed_outlined, l.statusLabel, l.ready,
+                  valueColor: AppTheme.success),
             ],
           ),
         ],
@@ -245,10 +225,7 @@ class _VehicleAssignmentViewState extends State<VehicleAssignmentView> {
         children: [
           Icon(icon, size: 20, color: _textGrey),
           const SizedBox(height: 6),
-          Text(
-            label,
-            style: GoogleFonts.poppins(color: _textGrey, fontSize: 11),
-          ),
+          Text(label, style: GoogleFonts.poppins(color: _textGrey, fontSize: 11)),
           const SizedBox(height: 2),
           Text(
             value,

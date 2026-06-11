@@ -18,7 +18,6 @@ class _ChecklistViewState extends State<ChecklistView> {
   final ScrollController _scrollController = ScrollController();
   bool _showCompleted = true;
 
-  // Palette (matches the mock)
   static const Color _textDark = Color(0xFF1B2335);
   static const Color _textGrey = Color(0xFF8A93A6);
   static const Color _cardBorder = Color(0xFFEDEFF4);
@@ -53,7 +52,46 @@ class _ChecklistViewState extends State<ChecklistView> {
     }
   }
 
-  /// Maps an item to its asset icon by matching keywords in the title.
+  // Maps the stable checklist item id ('1'..'6') to a localized title/desc.
+  // Keeps the controller unchanged (it still stores English internally).
+  String _itemTitle(AppLocalizations l, String id) {
+    switch (id) {
+      case '1':
+        return l.chkExteriorTitle;
+      case '2':
+        return l.chkLightsTitle;
+      case '3':
+        return l.chkMirrorsTitle;
+      case '4':
+        return l.chkFuelTitle;
+      case '5':
+        return l.chkSeatbeltTitle;
+      case '6':
+        return l.chkDashTitle;
+      default:
+        return '';
+    }
+  }
+
+  String _itemDesc(AppLocalizations l, String id) {
+    switch (id) {
+      case '1':
+        return l.chkExteriorDesc;
+      case '2':
+        return l.chkLightsDesc;
+      case '3':
+        return l.chkMirrorsDesc;
+      case '4':
+        return l.chkFuelDesc;
+      case '5':
+        return l.chkSeatbeltDesc;
+      case '6':
+        return l.chkDashDesc;
+      default:
+        return '';
+    }
+  }
+
   String? _iconAssetFor(String title) {
     final t = title.toLowerCase();
     if (t.contains('light') || t.contains('indicator')) return AppImages.light;
@@ -67,6 +105,7 @@ class _ChecklistViewState extends State<ChecklistView> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Consumer<ChecklistController>(
       builder: (context, checklistController, _) {
         final allItems = checklistController.items;
@@ -80,7 +119,7 @@ class _ChecklistViewState extends State<ChecklistView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                AppLocalizations.of(context).preTripInspection,
+                l.preTripInspection,
                 style: GoogleFonts.poppins(
                   color: _textDark,
                   fontSize: 22,
@@ -89,19 +128,18 @@ class _ChecklistViewState extends State<ChecklistView> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Check each item before starting your trip',
+                l.checkEachItem,
                 style: GoogleFonts.poppins(color: _textGrey, fontSize: 14),
               ),
               const SizedBox(height: 18),
 
-              _buildProgressCard(checklistController),
+              _buildProgressCard(context, checklistController),
               const SizedBox(height: 18),
 
-              // Section header + collapse toggle
               Row(
                 children: [
                   Text(
-                    'Inspection Checklist',
+                    l.inspectionChecklist,
                     style: GoogleFonts.poppins(
                       color: _textDark,
                       fontSize: 16,
@@ -117,8 +155,8 @@ class _ChecklistViewState extends State<ChecklistView> {
                       children: [
                         Text(
                           _showCompleted
-                              ? 'Collapse Completed'
-                              : 'Show Completed',
+                              ? l.collapseCompleted
+                              : l.showCompleted,
                           style: GoogleFonts.poppins(
                             color: AppTheme.primary,
                             fontSize: 13,
@@ -150,6 +188,8 @@ class _ChecklistViewState extends State<ChecklistView> {
                     final item = displayed[index];
                     return _buildChecklistItem(
                       item: item,
+                      title: _itemTitle(l, item.id),
+                      desc: _itemDesc(l, item.id),
                       onTap: () =>
                           _onItemTapped(checklistController, item.id),
                     );
@@ -159,7 +199,7 @@ class _ChecklistViewState extends State<ChecklistView> {
               const SizedBox(height: 14),
 
               AppTheme.gradientButton(
-                label: AppLocalizations.of(context).completeInspection,
+                label: l.completeInspection,
                 icon: Icons.arrow_forward_rounded,
                 onPressed: checklistController.isCompleted
                     ? () =>
@@ -173,7 +213,8 @@ class _ChecklistViewState extends State<ChecklistView> {
     );
   }
 
-  Widget _buildProgressCard(ChecklistController controller) {
+  Widget _buildProgressCard(BuildContext context, ChecklistController controller) {
+    final l = AppLocalizations.of(context);
     final pct = (controller.progress * 100).toInt();
     return Container(
       padding: const EdgeInsets.all(16),
@@ -193,7 +234,7 @@ class _ChecklistViewState extends State<ChecklistView> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Progress',
+            l.progress,
             style: GoogleFonts.poppins(
               color: _textDark,
               fontSize: 15,
@@ -204,7 +245,7 @@ class _ChecklistViewState extends State<ChecklistView> {
           Row(
             children: [
               Text(
-                '${controller.completedCount} of ${controller.totalCount} checks completed',
+                '${controller.completedCount} / ${controller.totalCount} ${l.checksCompletedWord}',
                 style: GoogleFonts.poppins(color: _textGrey, fontSize: 13),
               ),
               const Spacer(),
@@ -235,6 +276,8 @@ class _ChecklistViewState extends State<ChecklistView> {
 
   Widget _buildChecklistItem({
     required dynamic item,
+    required String title,
+    required String desc,
     required VoidCallback onTap,
   }) {
     final bool done = item.isCompleted;
@@ -260,7 +303,6 @@ class _ChecklistViewState extends State<ChecklistView> {
           ),
           child: Row(
             children: [
-              // Leading icon (asset has its own coloured square; fallback box)
               if (iconAsset != null)
                 Image.asset(iconAsset, width: 46, height: 46, fit: BoxFit.contain)
               else
@@ -275,24 +317,22 @@ class _ChecklistViewState extends State<ChecklistView> {
                       color: AppTheme.primary, size: 22),
                 ),
               const SizedBox(width: 14),
-
-              // Title + description
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      item.title,
+                      title,
                       style: GoogleFonts.poppins(
                         color: _textDark,
                         fontSize: 14.5,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    if ((item.description as String).isNotEmpty) ...[
+                    if (desc.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(
-                        item.description,
+                        desc,
                         style: GoogleFonts.poppins(
                           color: _textGrey,
                           fontSize: 12.5,
@@ -303,8 +343,6 @@ class _ChecklistViewState extends State<ChecklistView> {
                 ),
               ),
               const SizedBox(width: 10),
-
-              // Trailing check indicator
               done
                   ? Container(
                       width: 28,

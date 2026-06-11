@@ -3,63 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:proximity_guard/views/theme/app_theme.dart';
 
-/// ============================================================================
-/// LiveRouteMap
-/// ----------------------------------------------------------------------------
-/// A self-contained, dependency-free route map for Proximity Guard Drive.
-///
-/// WHY THIS EXISTS:
-///   The blueprint requires a "Live map / route traces / GPS" view (Maps = P0,
-///   mobile location = P1). The project previously visualised the route only as
-///   a 10-segment progress bar and stored no coordinates. This widget renders
-///   an actual map: a route polyline, a moving vehicle marker (with heading),
-///   start/destination pins, an operating geofence zone, and incident markers.
-///
-///   It is driven by the SAME data you already have (`routeProgress` 0..1 from
-///   TripController), so it works in the simulated pilot demo with ZERO new
-///   packages, ZERO API keys and ZERO native setup.
-///
-/// HOW TO USE (live HUD, during_trip/driving_hud_view.dart):
-///   Replace the route-progress card with:
-///
-///     LiveRouteMap(
-///       progress: data.routeProgress,
-///       routeName: data.routeName,
-///       isLive: true,
-///       inGeofence: data.isInGeofence,
-///       speedKmh: data.currentSpeed,
-///     )
-///
-/// HOW TO USE (post-trip, post_trip_summary_view.dart):
-///   Build incident markers from the trip's incidents, then:
-///
-///     LiveRouteMap(
-///       progress: 1.0,
-///       routeName: summary.routeName,
-///       isLive: false,
-///       incidents: summary.incidents.map((inc) {
-///         final total = summary.duration.inSeconds == 0
-///             ? 1
-///             : summary.duration.inSeconds;
-///         return MapIncident(
-///           progress: (inc.timestampInTrip.inSeconds / total).clamp(0.0, 1.0),
-///           color: inc.alert.severity == AlertSeverity.critical
-///               ? AppTheme.danger
-///               : AppTheme.warning,
-///         );
-///       }).toList(),
-///     )
-///
-/// UPGRADING TO REAL GPS LATER (optional, production):
-///   1. Add to pubspec.yaml:  flutter_map: ^7.0.0   latlong2: ^0.9.1
-///      and geolocator: ^13.0.0 for live device position.
-///   2. Feed real LatLng points into a flutter_map Polyline; keep this widget
-///      as the offline / no-signal fallback. The public API here (progress +
-///      incidents) maps cleanly onto a real polyline.
-/// ============================================================================
-
-/// A point of interest plotted along the route, expressed as a fraction of the
-/// total route length (0.0 = start, 1.0 = destination).
 class MapIncident {
   final double progress;
   final Color color;

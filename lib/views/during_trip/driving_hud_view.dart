@@ -18,9 +18,12 @@ import '../../models/trip_alert_model.dart';
 import '../../core/monitor_state.dart' as sd;
 import '../../core/monitoring_engine.dart';
 import '../../core/object_detector_engine.dart';
+import '../../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_assets.dart';
 import '../general/settings_hub_view.dart';
+import '../general/trip_history_view.dart';
+import '../general/notification_center_view.dart';
 import '../post_trip/post_trip_summary_view.dart';
 import 'trip_alert_overlay.dart';
 
@@ -32,7 +35,6 @@ class DrivingHudView extends StatefulWidget {
 }
 
 class _DrivingHudViewState extends State<DrivingHudView> {
-  // ── Camera monitoring pipeline ─────────────────────────────────────────────
   CameraController? _camera;
   FaceDetector? _detector;
   late final sd.MonitorState _monitor;
@@ -49,14 +51,12 @@ class _DrivingHudViewState extends State<DrivingHudView> {
   bool _isProcessing = false;
   int _frameIndex = 0;
 
-  // When true, the camera fills the screen and the HUD shrinks to a thumbnail.
   bool _cameraExpanded = false;
+  int _selectedBottomIndex = 0;
 
-  // Transition trackers so we only push an alert on state changes.
   sd.DrowsinessLevel _lastDrowsy = sd.DrowsinessLevel.alert;
   sd.DistractionStatus _lastDistract = sd.DistractionStatus.forward;
 
-  // Palette (light design)
   static const Color _textDark = Color(0xFF1B2335);
   static const Color _textGrey = Color(0xFF8A93A6);
   static const Color _cardBorder = Color(0xFFEDEFF4);
@@ -394,7 +394,38 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     super.dispose();
   }
 
-  // ─── UI (new light design) ──────────────────────────────────────────────────
+  // ─── Localized alert title/message from type (no controller change) ───
+  String _alertTitle(AppLocalizations l, AlertType type) {
+    switch (type) {
+      case AlertType.forwardDistance:
+        return l.alertFollowingTitle;
+      case AlertType.drowsiness:
+        return l.alertDrowsyTitle;
+      case AlertType.distraction:
+        return l.alertDistractionTitle;
+      case AlertType.geofenceBreach:
+        return l.alertGeofenceTitle;
+      case AlertType.speedLimit:
+        return l.alertSpeedTitle;
+    }
+  }
+
+  String _alertMsg(AppLocalizations l, AlertType type) {
+    switch (type) {
+      case AlertType.forwardDistance:
+        return l.alertFollowingMsg;
+      case AlertType.drowsiness:
+        return l.alertDrowsyMsg;
+      case AlertType.distraction:
+        return l.alertDistractionMsg;
+      case AlertType.geofenceBreach:
+        return l.alertGeofenceMsg;
+      case AlertType.speedLimit:
+        return l.alertSpeedMsg;
+    }
+  }
+
+  // ─── UI ───
 
   @override
   Widget build(BuildContext context) {
@@ -451,7 +482,6 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                   ],
                 ),
 
-                // ── Monitoring camera: always-visible thumbnail / full-screen ──
                 if (_camReady && _camera != null) ...[
                   if (_cameraExpanded)
                     Positioned.fill(
@@ -482,14 +512,14 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                         children: [
                           _expandedActionButton(
                             icon: Icons.close_fullscreen_rounded,
-                            label: 'Minimize',
+                            label: AppLocalizations.of(context).minimize,
                             color: AppTheme.primary,
                             onTap: () => setState(() => _cameraExpanded = false),
                           ),
                           const SizedBox(height: 12),
                           _expandedActionButton(
                             icon: Icons.stop_rounded,
-                            label: 'End',
+                            label: AppLocalizations.of(context).endShort,
                             color: AppTheme.danger,
                             onTap: () => _showEndTripDialog(context, tripController),
                           ),
@@ -518,10 +548,11 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     );
   }
 
-  // ── Header (blue appbar) ──
   Widget _buildHeader(BuildContext context, TripController controller) {
+    final l = AppLocalizations.of(context);
     final topPad = MediaQuery.of(context).padding.top;
     return Container(
+      // height: 140,
       padding: EdgeInsets.fromLTRB(20, topPad + 14, 20, 36),
       decoration: const BoxDecoration(
         image: DecorationImage(
@@ -536,24 +567,24 @@ class _DrivingHudViewState extends State<DrivingHudView> {
             onTap: () => _showEndTripDialog(context, controller),
           ),
           const SizedBox(width: 14),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Driving Mode',
-                  style: TextStyle(
+                  l.drivingMode,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                SizedBox(height: 2),
-                Text(
-                  'Proximity Guard Active',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                ),
+                // const SizedBox(height: 2),
+                // Text(
+                //   l.proximityGuardActive,
+                //   style: const TextStyle(color: Colors.white70, fontSize: 12),
+                // ),
               ],
             ),
           ),
@@ -575,7 +606,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Live',
+                  l.live,
                   style: GoogleFonts.poppins(
                     color: const Color(0xFF16A34A),
                     fontSize: 12,
@@ -585,12 +616,12 @@ class _DrivingHudViewState extends State<DrivingHudView> {
               ],
             ),
           ),
-          const SizedBox(width: 10),
-          _circleButton(
-            icon: Icons.notifications_none_rounded,
-            onTap: () => _showAlertsSheet(context, controller),
-            badge: controller.activeAlerts.isNotEmpty,
-          ),
+          // const SizedBox(width: 10),
+          // _circleButton(
+          //   icon: Icons.notifications_none_rounded,
+          //   onTap: () => _showAlertsSheet(context, controller),
+          //   badge: controller.activeAlerts.isNotEmpty,
+          // ),
         ],
       ),
     );
@@ -633,11 +664,10 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     );
   }
 
-  // ── Speed card ──
   Widget _buildSpeedCard(BuildContext context, TripDataModel data) {
+    final l = AppLocalizations.of(context);
     final isOver = data.isOverSpeed;
     final ratio = (data.currentSpeed / (data.speedLimit * 1.5)).clamp(0.0, 1.0);
-    final accent = isOver ? AppTheme.danger : AppTheme.primary;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
@@ -653,7 +683,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
       child: Column(
         children: [
           Text(
-            'Current Speed',
+            l.currentSpeed,
             style: GoogleFonts.poppins(color: _textGrey, fontSize: 13),
           ),
           const SizedBox(height: 8),
@@ -697,13 +727,13 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                 icon: isOver
                     ? Icons.warning_amber_rounded
                     : Icons.verified_user_outlined,
-                text: isOver ? 'Over Limit' : 'Within Limit',
+                text: isOver ? l.overLimit : l.withinLimit,
                 color: isOver ? AppTheme.danger : AppTheme.success,
               ),
               const SizedBox(width: 10),
               _statusPill(
                 icon: Icons.speed_rounded,
-                text: 'Limit ${data.speedLimit.toInt()} km/h',
+                text: '${l.limitLabel} ${data.speedLimit.toInt()} km/h',
                 color: AppTheme.primary,
               ),
             ],
@@ -736,8 +766,8 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     );
   }
 
-  // ── Following distance card ──
   Widget _buildDistanceCard(BuildContext context, TripDataModel data) {
+    final l = AppLocalizations.of(context);
     final tooClose = data.isTooClose;
     final color = tooClose ? AppTheme.danger : AppTheme.success;
 
@@ -772,7 +802,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
               const SizedBox(width: 14),
               Expanded(
                 child: Text(
-                  'Following Distance',
+                  l.followingDistance,
                   style: GoogleFonts.poppins(
                       color: _textDark,
                       fontSize: 14,
@@ -791,7 +821,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                         height: 1),
                   ),
                   Text(
-                    'ahead',
+                    l.ahead,
                     style:
                         GoogleFonts.poppins(color: _textGrey, fontSize: 11),
                   ),
@@ -810,7 +840,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                tooClose ? 'Too Close' : 'Safe Distance',
+                tooClose ? l.tooClose : l.safeDistance,
                 style: GoogleFonts.poppins(
                     color: color, fontSize: 12, fontWeight: FontWeight.w600),
               ),
@@ -821,8 +851,8 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     );
   }
 
-  // ── Live tracking + map ──
   Widget _buildLiveTracking(BuildContext context, TripDataModel data) {
+    final l = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -836,7 +866,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
             ),
             const SizedBox(width: 8),
             Text(
-              'Live Tracking',
+              l.liveTracking,
               style: GoogleFonts.poppins(
                   color: _textDark,
                   fontSize: 15,
@@ -858,8 +888,8 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     );
   }
 
-  // ── Stats row ──
   Widget _buildStatsRow(BuildContext context, TripDataModel data) {
+    final l = AppLocalizations.of(context);
     final duration = data.tripDuration;
     final timeStr =
         '${duration.inMinutes.toString().padLeft(2, '0')}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}';
@@ -879,13 +909,13 @@ class _DrivingHudViewState extends State<DrivingHudView> {
       ),
       child: Row(
         children: [
-          _statCol(Icons.near_me_rounded, 'Distance',
+          _statCol(Icons.near_me_rounded, l.distance,
               '${covered.toStringAsFixed(0)} km', const Color(0xFF0891B2)),
           _statDivider(),
-          _statCol(Icons.flag_rounded, 'Km Left',
+          _statCol(Icons.flag_rounded, l.kmLeft,
               '${kmLeft.toStringAsFixed(1)} km', AppTheme.primary),
           _statDivider(),
-          _statCol(Icons.access_time_rounded, 'Duration', timeStr,
+          _statCol(Icons.access_time_rounded, l.duration, timeStr,
               const Color(0xFF7C3AED)),
         ],
       ),
@@ -913,65 +943,90 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     );
   }
 
-  // ── End Trip + SOS ──
   Widget _buildActionButtons(BuildContext context, TripController controller) {
+    final l = AppLocalizations.of(context);
     return Row(
       children: [
+        // ── End Trip (solid red) ──
         Expanded(
-          flex: 3,
           child: GestureDetector(
             onTap: () => _showEndTripDialog(context, controller),
             child: Container(
-              height: 52,
+              height: 54,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                    colors: [Color(0xFFDC2626), Color(0xFFEF4444)]),
-                borderRadius: BorderRadius.circular(14),
+                color: AppTheme.red,
+                borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                      color: AppTheme.danger.withValues(alpha: 0.25),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4)),
+                    color: AppTheme.red.withValues(alpha: 0.30),
+                    blurRadius: 12,
+                    offset: const Offset(0, 5),
+                  ),
                 ],
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.power_settings_new_rounded,
-                      color: Colors.white, size: 18),
+                  Image.asset(
+                    AppImages.endTrip,
+                    width: 22,
+                    height: 22,
+                    fit: BoxFit.contain,
+                    color: Colors.white,
+                  ),
                   const SizedBox(width: 8),
-                  Text('End Trip',
+                  Flexible(
+                    child: Text(
+                      l.endTrip,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600)),
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
         ),
         const SizedBox(width: 12),
+        // ── SOS (light grey) ──
         Expanded(
-          flex: 2,
           child: GestureDetector(
             onTap: () => _showSos(context),
             child: Container(
-              height: 52,
+              height: 54,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                color: AppTheme.danger.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(14),
+                color: const Color(0xFFE9EDF4),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.sos_rounded,
-                      color: AppTheme.danger, size: 18),
+                  Image.asset(
+                    AppImages.sos,
+                    width: 22,
+                    height: 22,
+                    fit: BoxFit.contain,
+                  ),
                   const SizedBox(width: 8),
-                  Text('SOS',
+                  Flexible(
+                    child: Text(
+                      l.sos,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.poppins(
-                          color: AppTheme.danger,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700)),
+                        color: _textDark,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -981,30 +1036,50 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     );
   }
 
-  // ── Bottom navigation ──
   Widget _buildBottomNav(BuildContext context, TripController controller) {
+    final l = AppLocalizations.of(context);
     return Container(
       padding: EdgeInsets.fromLTRB(
           8, 8, 8, 8 + MediaQuery.of(context).padding.bottom),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: _cardBorder)),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primary.withValues(alpha: 0.12),
+            blurRadius: 14,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          _navItem(Icons.dashboard_rounded, 'Dashboard',
-              active: true, onTap: () {}),
-          _navItem(Icons.notifications_none_rounded, 'Alerts',
+          _navItem(AppImages.bottomdash, l.dashboard,
+              active: _selectedBottomIndex == 0, onTap: () {
+            setState(() => _selectedBottomIndex = 0);
+          }),
+          _navItem(AppImages.bottomalerts, l.navAlerts,
+              active: _selectedBottomIndex == 1,
               badge: controller.activeAlerts.isNotEmpty
                   ? controller.activeAlerts.length
                   : null,
-              onTap: () => _showAlertsSheet(context, controller)),
-          _navItem(Icons.route_rounded, 'Trips', onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Trips — coming soon')),
+              onTap: () {
+                setState(() => _selectedBottomIndex = 1);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const NotificationCenterView()),
+                );
+              }),
+          _navItem(AppImages.bottomtrips, l.trips,
+              active: _selectedBottomIndex == 2, onTap: () {
+            setState(() => _selectedBottomIndex = 2);
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const TripHistoryView()),
             );
           }),
-          _navItem(Icons.person_outline_rounded, 'Profile', onTap: () {
+          _navItem(AppImages.bottomprofile, l.profile,
+              active: _selectedBottomIndex == 3, onTap: () {
+            setState(() => _selectedBottomIndex = 3);
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const SettingsHubView()),
             );
@@ -1014,50 +1089,72 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     );
   }
 
-  Widget _navItem(IconData icon, String label,
+  Widget _navItem(String iconAsset, String label,
       {bool active = false, int? badge, required VoidCallback onTap}) {
     final color = active ? AppTheme.primary : _textGrey;
     return Expanded(
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Icon(icon, color: color, size: 23),
-                  if (badge != null)
-                    Positioned(
-                      top: -4,
-                      right: -8,
-                      child: Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          color: AppTheme.danger,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 1.5),
-                        ),
-                        child: Text('$badge',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 8,
-                                fontWeight: FontWeight.w700)),
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+            decoration: active
+                ? BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primary.withValues(alpha: 0.18),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(label,
-                  style: GoogleFonts.poppins(
+                    ],
+                  )
+                : null,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Image.asset(
+                      iconAsset,
+                      width: active ? 24 : 22,
+                      height: active ? 24 : 22,
+                      fit: BoxFit.contain,
                       color: color,
-                      fontSize: 10,
-                      fontWeight:
-                          active ? FontWeight.w600 : FontWeight.w500)),
-            ],
+                    ),
+                    if (badge != null)
+                      Positioned(
+                        top: -4,
+                        right: -8,
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            color: AppTheme.danger,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1.5),
+                          ),
+                          child: Text('$badge',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(label,
+                    style: GoogleFonts.poppins(
+                        color: color,
+                        fontSize: 10,
+                        fontWeight:
+                            active ? FontWeight.w600 : FontWeight.w500)),
+              ],
+            ),
           ),
         ),
       ),
@@ -1065,6 +1162,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
   }
 
   void _showSos(BuildContext context) {
+    final l = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -1085,14 +1183,14 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                     color: AppTheme.danger, size: 30),
               ),
               const SizedBox(height: 16),
-              Text('Send SOS?',
+              Text(l.sendSosQ,
                   style: GoogleFonts.poppins(
                       color: _textDark,
                       fontSize: 18,
                       fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
               Text(
-                'An emergency alert will be sent to your fleet manager with your location.',
+                l.sosBody,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(color: _textGrey, fontSize: 13),
               ),
@@ -1102,7 +1200,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(ctx).pop(),
-                      child: const Text('Cancel'),
+                      child: Text(l.cancel),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1114,10 +1212,10 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                       onPressed: () {
                         Navigator.of(ctx).pop();
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('SOS alert sent')),
+                          SnackBar(content: Text(l.sosSent)),
                         );
                       },
-                      child: const Text('Send'),
+                      child: Text(l.send),
                     ),
                   ),
                 ],
@@ -1128,8 +1226,6 @@ class _DrivingHudViewState extends State<DrivingHudView> {
       ),
     );
   }
-
-  // ─── Monitoring overlay (kept from the original) ────────────────────────────
 
   Widget _buildMonitorPreview() {
     final cam = _camera!;
@@ -1178,7 +1274,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      'MONITOR',
+                      AppLocalizations.of(context).monitoring,
                       style: GoogleFonts.poppins(
                           color: Colors.white,
                           fontSize: 7,
@@ -1229,9 +1325,10 @@ class _DrivingHudViewState extends State<DrivingHudView> {
   }
 
   Widget _buildMonitorStatusBar() {
+    final l = AppLocalizations.of(context);
     final calText = _monitor.calibrated
         ? 'CAL ✓'
-        : 'CALIBRATING ${_monitor.calibrationFrame}/${MonitoringEngine.kCalibrationFrames}';
+        : '${l.calibrating} ${_monitor.calibrationFrame}/${MonitoringEngine.kCalibrationFrames}';
     final calColor = _monitor.calibrated ? Colors.greenAccent : Colors.amber;
 
     return Container(
@@ -1246,7 +1343,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                 shape: BoxShape.circle, color: Color(0xFF4ADE80)),
           ),
           const SizedBox(width: 6),
-          Text('MONITORING',
+          Text(l.monitoring,
               style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 11,
@@ -1259,7 +1356,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                   fontSize: 11,
                   fontWeight: FontWeight.w700)),
           const Spacer(),
-          Text('FACES: ${_monitor.faceCount}',
+          Text('${l.facesLabel}: ${_monitor.faceCount}',
               style: GoogleFonts.poppins(
                   color: Colors.cyanAccent,
                   fontSize: 11,
@@ -1270,23 +1367,24 @@ class _DrivingHudViewState extends State<DrivingHudView> {
   }
 
   Widget _buildMonitorBanner() {
+    final l = AppLocalizations.of(context);
     Widget? banner;
     if (_monitor.drowsinessLevel == sd.DrowsinessLevel.asleep) {
-      banner = _monitorBanner(Colors.red, '⚠  WAKE UP — ASLEEP AT WHEEL  ⚠', Colors.white, 20);
+      banner = _monitorBanner(Colors.red, '⚠  ${l.bannerWakeUp}  ⚠', Colors.white, 20);
     } else if (_monitor.detectedObjects.isNotEmpty) {
       final obj = _monitor.detectedObjects.first;
-      String msg = '📵  BANNED OBJECT: ${obj.label.toUpperCase()}';
+      String msg = '📵  ${l.bannerBannedObject}: ${obj.label.toUpperCase()}';
       if (['Bottle', 'Wine Glass', 'Cup'].contains(obj.label)) {
-        msg = '🍺  DRINK: ${obj.label.toUpperCase()}';
+        msg = '🍺  ${l.bannerDrink}: ${obj.label.toUpperCase()}';
       } else if (['Banana', 'Apple', 'Sandwich', 'Orange', 'Hot Dog', 'Pizza', 'Donut', 'Cake']
           .contains(obj.label)) {
-        msg = '🍔  FOOD: ${obj.label.toUpperCase()}';
+        msg = '🍔  ${l.bannerFood}: ${obj.label.toUpperCase()}';
       }
       banner = _monitorBanner(Colors.purple.shade700, msg, Colors.white, 17);
     } else if (_monitor.drowsinessLevel == sd.DrowsinessLevel.drowsy) {
-      banner = _monitorBanner(Colors.orange, '⚠  DROWSINESS DETECTED  ⚠', Colors.white, 17);
+      banner = _monitorBanner(Colors.orange, '⚠  ${l.bannerDrowsy}  ⚠', Colors.white, 17);
     } else if (_monitor.distractionStatus == sd.DistractionStatus.distracted) {
-      banner = _monitorBanner(Colors.yellow.shade700, '⚠  DISTRACTION DETECTED  ⚠', Colors.black, 17);
+      banner = _monitorBanner(Colors.yellow.shade700, '⚠  ${l.bannerDistraction}  ⚠', Colors.black, 17);
     }
     return banner ?? const SizedBox.shrink();
   }
@@ -1386,9 +1484,8 @@ class _DrivingHudViewState extends State<DrivingHudView> {
     );
   }
 
-  // ─── Alerts sheet & dialogs (kept from the original) ────────────────────────
-
   void _showAlertsSheet(BuildContext context, TripController controller) {
+    final l = AppLocalizations.of(context);
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1436,12 +1533,12 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Trip Alerts',
+                          Text(l.tripAlerts,
                               style: GoogleFonts.poppins(
                                   color: AppTheme.of(context).textPrimary,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700)),
-                          Text('${activeAlerts.length} active · ${allAlerts.length} total',
+                          Text('${activeAlerts.length} ${l.activeWord} · ${allAlerts.length} ${l.totalWord}',
                               style: GoogleFonts.poppins(
                                   color: AppTheme.of(context).textMuted,
                                   fontSize: 10)),
@@ -1465,7 +1562,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                                 .withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Text('Clear All',
+                          child: Text(l.clearAll,
                               style: GoogleFonts.poppins(
                                   color: AppTheme.of(context).textSecondary,
                                   fontSize: 10,
@@ -1485,13 +1582,13 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                           size: 48,
                           color: AppTheme.success.withValues(alpha: 0.5)),
                       const SizedBox(height: 12),
-                      Text('No alerts yet',
+                      Text(l.noAlertsYet,
                           style: GoogleFonts.poppins(
                               color: AppTheme.of(context).textMuted,
                               fontSize: 13,
                               fontWeight: FontWeight.w500)),
                       const SizedBox(height: 4),
-                      Text('Drive safe!',
+                      Text(l.driveSafe,
                           style: GoogleFonts.poppins(
                               color: AppTheme.of(context).textMuted,
                               fontSize: 11)),
@@ -1542,7 +1639,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(alert.title,
+                                    Text(_alertTitle(l, alert.type),
                                         style: GoogleFonts.poppins(
                                             color: isDismissed
                                                 ? AppTheme.of(context).textMuted
@@ -1550,7 +1647,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                                                     .textPrimary,
                                             fontSize: 11,
                                             fontWeight: FontWeight.w600)),
-                                    Text(alert.message,
+                                    Text(_alertMsg(l, alert.type),
                                         style: GoogleFonts.poppins(
                                             color:
                                                 AppTheme.of(context).textMuted,
@@ -1611,6 +1708,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
   }
 
   void _showEndTripDialog(BuildContext context, TripController controller) {
+    final l = AppLocalizations.of(context);
     showDialog(
       context: context,
       barrierColor: Colors.black45,
@@ -1634,14 +1732,14 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                     size: 36, color: AppTheme.danger),
               ),
               const SizedBox(height: 20),
-              Text('End Trip?',
+              Text(l.endTripQ,
                   style: GoogleFonts.poppins(
                       color: AppTheme.of(context).textPrimary,
                       fontSize: 17,
                       fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               Text(
-                'This will stop all monitoring and end the current driving session.',
+                l.endTripBody,
                 style: GoogleFonts.poppins(
                     color: AppTheme.of(context).textSecondary,
                     fontSize: 11,
@@ -1662,7 +1760,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14)),
                       ),
-                      child: Text('Cancel',
+                      child: Text(l.cancel,
                           style:
                               GoogleFonts.poppins(fontWeight: FontWeight.w500)),
                     ),
@@ -1687,7 +1785,7 @@ class _DrivingHudViewState extends State<DrivingHudView> {
                             borderRadius: BorderRadius.circular(14)),
                         elevation: 0,
                       ),
-                      child: Text('End Trip',
+                      child: Text(l.endTrip,
                           style:
                               GoogleFonts.poppins(fontWeight: FontWeight.w600)),
                     ),
@@ -1702,7 +1800,6 @@ class _DrivingHudViewState extends State<DrivingHudView> {
   }
 }
 
-/// Clean speed gauge (270° arc, no tick marks).
 class _SpeedGaugePainter extends CustomPainter {
   final double progress;
   final bool over;
@@ -1716,7 +1813,6 @@ class _SpeedGaugePainter extends CustomPainter {
     const startAngle = math.pi * 0.75;
     const sweepAngle = math.pi * 1.5;
 
-    // Track
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
       startAngle,

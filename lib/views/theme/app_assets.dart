@@ -19,8 +19,18 @@ class AppImages {
   static const String wiper = 'assets/images/wiper.png';
   static const String fuel = 'assets/images/fuel.png';
   static const String seatbelt = 'assets/images/seatbelt.png';
-  static const String driver         = 'assets/images/driver.png';
-static const String time           = 'assets/images/time.png';
-static const String inspectionIcon = 'assets/images/inspectionicon.png';
-static const String vehicleIcon    = 'assets/images/vehicleicon.png';
+  static const String driver = 'assets/images/driver.png';
+  static const String time = 'assets/images/time.png';
+    static const String bottomalerts = 'assets/images/bottomalert.png';
+        static const String bottomprofile = 'assets/images/bottomprofile.png';
+
+
+  static const String bottomtrips = 'assets/images/bottomtrip.png';
+
+  static const String bottomdash = 'assets/images/bottomdash.png';
+
+  static const String inspectionIcon = 'assets/images/inspectionicon.png';
+  static const String vehicleIcon = 'assets/images/vehicleicon.png';
+  static const String endTrip = 'assets/images/endtrip.png';
+  static const String sos = 'assets/images/sos.png';
 }

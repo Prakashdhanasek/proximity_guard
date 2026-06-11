@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:proximity_guard/l10n/name_localisor.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/vehicle_controller.dart';
 import '../../controllers/pre_trip_controller.dart';
@@ -13,13 +14,13 @@ import '../during_trip/driving_hud_view.dart';
 class ReadyToStartView extends StatelessWidget {
   const ReadyToStartView({super.key});
 
-  // Palette (matches the mock)
   static const Color _textDark = Color(0xFF1B2335);
   static const Color _textGrey = Color(0xFF8A93A6);
   static const Color _cardBorder = Color(0xFFEDEFF4);
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final driver = context.read<AuthController>().authenticatedDriver;
     final vehicle = context.read<VehicleController>().assignedVehicle;
 
@@ -32,7 +33,7 @@ class ReadyToStartView extends StatelessWidget {
           _buildHero(),
           const SizedBox(height: 22),
           Text(
-            AppLocalizations.of(context).readyToDrive,
+            l.readyToDrive,
             style: GoogleFonts.poppins(
               color: AppTheme.primary,
               fontSize: 24,
@@ -41,7 +42,7 @@ class ReadyToStartView extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'All verification completed successfully',
+            l.allVerificationCompleted,
             textAlign: TextAlign.center,
             style: GoogleFonts.poppins(color: _textGrey, fontSize: 14),
           ),
@@ -50,7 +51,7 @@ class ReadyToStartView extends StatelessWidget {
           const SizedBox(height: 26),
 
           AppTheme.gradientButton(
-            label: AppLocalizations.of(context).startVehicle,
+            label: l.startVehicle,
             icon: Icons.power_settings_new_rounded,
             onPressed: () => _showStartConfirmation(context),
             height: 58,
@@ -62,7 +63,7 @@ class ReadyToStartView extends StatelessWidget {
               context.read<AuthController>().reset();
             },
             child: Text(
-              AppLocalizations.of(context).cancelReset,
+              l.cancelReset,
               style: GoogleFonts.poppins(
                 color: AppTheme.primary,
                 fontSize: 14,
@@ -76,7 +77,6 @@ class ReadyToStartView extends StatelessWidget {
     );
   }
 
-  // Truck inside a soft circle with a green check badge.
   Widget _buildHero() {
     return SizedBox(
       width: 168,
@@ -123,6 +123,7 @@ class ReadyToStartView extends StatelessWidget {
 
   Widget _buildSummaryCard(
       BuildContext context, dynamic driver, dynamic vehicle) {
+    final l = AppLocalizations.of(context);
     final String vehicleText = vehicle != null
         ? '${vehicle.make} ${vehicle.model} , ${vehicle.registrationNumber}'
         : '—';
@@ -145,26 +146,26 @@ class ReadyToStartView extends StatelessWidget {
         children: [
           _buildRow(
             AppImages.driver,
-            AppLocalizations.of(context).driver,
-            driver?.name ?? 'Unknown',
+            l.driver,
+            localizedName(driver?.name ?? l.unknown, l.locale),
           ),
           _divider(),
           _buildRow(
             AppImages.vehicleIcon,
-            AppLocalizations.of(context).vehicle,
+            l.vehicle,
             vehicleText,
           ),
           _divider(),
           _buildRow(
             AppImages.inspectionIcon,
-            AppLocalizations.of(context).inspection,
-            AppLocalizations.of(context).passed,
+            l.inspection,
+            l.passed,
           ),
           _divider(),
           _buildRow(
             AppImages.time,
-            AppLocalizations.of(context).time,
-            _currentDateTime(),
+            l.time,
+            _currentDateTime(l),
           ),
         ],
       ),
@@ -205,20 +206,20 @@ class ReadyToStartView extends StatelessWidget {
 
   Widget _divider() => Divider(color: _cardBorder, height: 1, thickness: 1);
 
-  String _currentDateTime() {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
+  String _currentDateTime(AppLocalizations l) {
+    final months = l.monthsShort.split('|');
     final now = DateTime.now();
     final h = now.hour % 12 == 0 ? 12 : now.hour % 12;
     final period = now.hour >= 12 ? 'pm' : 'am';
     final time =
         '${h.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} $period';
-    return '$time . ${now.day} ${months[now.month - 1]} ${now.year}';
+    final monthName =
+        (now.month - 1) < months.length ? months[now.month - 1] : '${now.month}';
+    return '$time . ${now.day} $monthName ${now.year}';
   }
 
   void _showStartConfirmation(BuildContext context) {
+    final l = AppLocalizations.of(context);
     showDialog(
       context: context,
       barrierColor: Colors.black87,
@@ -242,7 +243,7 @@ class ReadyToStartView extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               Text(
-                AppLocalizations.of(context).vehicleAuthorized,
+                l.vehicleAuthorized,
                 style: TextStyle(
                     color: AppTheme.of(context).textPrimary,
                     fontSize: 20,
@@ -250,14 +251,14 @@ class ReadyToStartView extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                AppLocalizations.of(context).driveStarted,
+                l.driveStarted,
                 style: TextStyle(
                     color: AppTheme.of(context).textSecondary, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
               AppTheme.gradientButton(
-                label: AppLocalizations.of(context).startDriving,
+                label: l.startDriving,
                 icon: Icons.navigation_rounded,
                 onPressed: () {
                   Navigator.of(ctx).pop();

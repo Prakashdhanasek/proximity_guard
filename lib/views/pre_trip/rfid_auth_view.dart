@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:avatar_glow/avatar_glow.dart';
+import 'package:proximity_guard/l10n/name_localisor.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/pre_trip_controller.dart';
 import '../../models/auth_result_model.dart';
+import '../../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 
 class RfidAuthView extends StatelessWidget {
@@ -11,6 +13,7 @@ class RfidAuthView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Consumer<AuthController>(
       builder: (context, authController, _) {
         return Padding(
@@ -23,10 +26,10 @@ class RfidAuthView extends StatelessWidget {
               const SizedBox(height: 36),
               Text(
                 authController.status == AuthStatus.success
-                    ? 'Card Verified'
+                    ? l.cardVerified
                     : authController.status == AuthStatus.inProgress
-                        ? 'Hold Card Near Device'
-                        : 'Tap Your Card',
+                        ? l.holdCardNearDevice
+                        : l.tapYourCard,
                 style: TextStyle(
                   color: authController.status == AuthStatus.success
                       ? AppTheme.accent
@@ -52,7 +55,7 @@ class RfidAuthView extends StatelessWidget {
                     border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3)),
                   ),
                   child: Text(
-                    authController.authenticatedDriver!.name,
+                    localizedName(authController.authenticatedDriver!.name, l.locale),
                     style: const TextStyle(color: AppTheme.accent, fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -60,7 +63,7 @@ class RfidAuthView extends StatelessWidget {
               const Spacer(flex: 1),
               if (authController.status == AuthStatus.success)
                 AppTheme.gradientButton(
-                  label: 'Continue',
+                  label: l.continueLabel,
                   icon: Icons.arrow_forward_rounded,
                   onPressed: () => context.read<PreTripController>().onAuthSuccess(),
                 )
@@ -68,7 +71,7 @@ class RfidAuthView extends StatelessWidget {
                 TextButton.icon(
                   onPressed: () => authController.reset(),
                   icon: Icon(Icons.arrow_back_rounded, size: 16, color: AppTheme.of(context).textSecondary),
-                  label: Text('Choose another method',
+                  label: Text(l.chooseAnotherMethod,
                       style: TextStyle(color: AppTheme.of(context).textSecondary)),
                 ),
               const SizedBox(height: 24),

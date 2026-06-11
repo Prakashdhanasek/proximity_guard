@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:proximity_guard/l10n/name_localisor.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/auth_controller.dart';
 import '../../l10n/app_localizations.dart';
@@ -16,6 +17,7 @@ class SettingsHubView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final settings = context.watch<SettingsController>();
     final auth = context.read<AuthController>();
     final driver = auth.authenticatedDriver;
@@ -149,7 +151,7 @@ class SettingsHubView extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: _buildProfileCard(
                       context,
-                      driver?.name ?? 'Driver',
+                      localizedName(driver?.name ?? l.driver, l.locale),
                       driver?.licenseNumber ?? '',
                       driver?.id ?? 'DRV-001',
                     ),
@@ -178,24 +180,24 @@ class SettingsHubView extends StatelessWidget {
                               AppLocalizations.of(context).licenseBiometrics,
                               () => _push(context, const ProfileView()),
                             ),
-                            _MenuItem(
-                              Icons.notifications_rounded,
-                              const Color(0xFFF59E0B),
-                              AppLocalizations.of(context).notificationCenter,
-                              '${settings.unreadCount} ${AppLocalizations.of(context).unread}',
-                              () => _push(
-                                context,
-                                const NotificationCenterView(),
-                              ),
-                              badge: settings.unreadCount,
-                            ),
-                            _MenuItem(
-                              Icons.history_rounded,
-                              const Color(0xFF10B981),
-                              AppLocalizations.of(context).tripHistory,
-                              '${settings.tripHistory.length} ${AppLocalizations.of(context).tripsRecorded}',
-                              () => _push(context, const TripHistoryView()),
-                            ),
+                            // _MenuItem(
+                            //   Icons.notifications_rounded,
+                            //   const Color(0xFFF59E0B),
+                            //   AppLocalizations.of(context).notificationCenter,
+                            //   '${settings.unreadCount} ${AppLocalizations.of(context).unread}',
+                            //   () => _push(
+                            //     context,
+                            //     const NotificationCenterView(),
+                            //   ),
+                            //   badge: settings.unreadCount,
+                            // ),
+                          //   _MenuItem(
+                          //     Icons.history_rounded,
+                          //     const Color(0xFF10B981),
+                          //     AppLocalizations.of(context).tripHistory,
+                          //     '${settings.tripHistory.length} ${AppLocalizations.of(context).tripsRecorded}',
+                          //     () => _push(context, const TripHistoryView()),
+                          //   ),
                           ]),
 
                           const SizedBox(height: 18),
@@ -414,6 +416,7 @@ class SettingsHubView extends StatelessWidget {
 
   // ─── Quick Stats ───
   Widget _buildQuickStats(BuildContext context, SettingsController settings) {
+    final l = AppLocalizations.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? const Color(0xFF1E293B) : Colors.white;
     final textPrimary = isDark ? Colors.white : AppTheme.of(context).textPrimary;
@@ -430,7 +433,7 @@ class SettingsHubView extends StatelessWidget {
           icon: Icons.route_rounded,
           color: const Color(0xFF3B82F6),
           value: '${trips.length}',
-          label: 'Trips',
+          label: l.trips,
           cardColor: cardColor,
           textPrimary: textPrimary,
           textMuted: textMuted,
@@ -440,7 +443,7 @@ class SettingsHubView extends StatelessWidget {
           icon: Icons.straighten_rounded,
           color: const Color(0xFF10B981),
           value: '${totalKm.toStringAsFixed(0)} km',
-          label: 'Distance',
+          label: l.distance,
           cardColor: cardColor,
           textPrimary: textPrimary,
           textMuted: textMuted,
@@ -450,7 +453,7 @@ class SettingsHubView extends StatelessWidget {
           icon: Icons.shield_rounded,
           color: const Color(0xFFF59E0B),
           value: '$avgScore',
-          label: 'Avg Score',
+          label: l.avgScoreLabel,
           cardColor: cardColor,
           textPrimary: textPrimary,
           textMuted: textMuted,
@@ -460,7 +463,7 @@ class SettingsHubView extends StatelessWidget {
           icon: Icons.notifications_rounded,
           color: const Color(0xFFEF4444),
           value: '${settings.unreadCount}',
-          label: 'Unread',
+          label: l.unread,
           cardColor: cardColor,
           textPrimary: textPrimary,
           textMuted: textMuted,
@@ -514,6 +517,7 @@ class SettingsHubView extends StatelessWidget {
             ),
             Text(
               label,
+              textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
                 color: textMuted,
                 fontSize: 10,

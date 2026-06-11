@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/trip_alert_model.dart';
+import '../../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 
 class TripAlertOverlay extends StatelessWidget {
@@ -15,8 +16,14 @@ class TripAlertOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final color = _alertColor(context, alert.severity);
     final icon = _alertIcon(alert.type);
+
+    // Title + message are derived from alert.type so they translate with the
+    // app language (the controller no longer needs to supply localized text).
+    final title = _alertTitle(l, alert.type);
+    final message = _alertMessage(l, alert.type);
 
     return Material(
       color: Colors.transparent,
@@ -57,7 +64,7 @@ class TripAlertOverlay extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    alert.title,
+                    title,
                     style: GoogleFonts.poppins(
                       color: color,
                       fontSize: 13,
@@ -66,7 +73,7 @@ class TripAlertOverlay extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    alert.message,
+                    message,
                     style: GoogleFonts.poppins(
                       color: AppTheme.of(context).textSecondary,
                       fontSize: 11,
@@ -94,6 +101,37 @@ class TripAlertOverlay extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  // ─── Localized title / message keyed by alert type ───
+  String _alertTitle(AppLocalizations l, AlertType type) {
+    switch (type) {
+      case AlertType.forwardDistance:
+        return l.alertFollowingTitle;
+      case AlertType.drowsiness:
+        return l.alertDrowsyTitle;
+      case AlertType.distraction:
+        return l.alertDistractionTitle;
+      case AlertType.geofenceBreach:
+        return l.alertGeofenceTitle;
+      case AlertType.speedLimit:
+        return l.alertSpeedTitle;
+    }
+  }
+
+  String _alertMessage(AppLocalizations l, AlertType type) {
+    switch (type) {
+      case AlertType.forwardDistance:
+        return l.alertFollowingMsg;
+      case AlertType.drowsiness:
+        return l.alertDrowsyMsg;
+      case AlertType.distraction:
+        return l.alertDistractionMsg;
+      case AlertType.geofenceBreach:
+        return l.alertGeofenceMsg;
+      case AlertType.speedLimit:
+        return l.alertSpeedMsg;
+    }
   }
 
   Color _alertColor(BuildContext context, AlertSeverity severity) {

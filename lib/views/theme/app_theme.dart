@@ -50,6 +50,15 @@ class AppTheme {
   static const Color warning = Color(0xFFD97706);
   static const Color danger = Color(0xFFDC2626);
   static const Color success = Color(0xFF059669);
+  static const Color grey  = Color(0xFFE2E8F0);  // grey
+
+static const Color redBright  = Color(0xFFFF5858);  // red
+static const Color red        = Color(0xFFEF4444);  // red
+static const Color blueBright = Color(0xFF3B82F6);  // blue
+static const Color blue       = Color(0xFF2563EB);  // blue
+static const Color green      = Color(0xFF10B981);  // green
+static const Color greenLight = Color(0xFF94F4D4);  // light green
+static const Color blueLight  = Color(0xFFB0D2FF);  // light blue
 
   static const LinearGradient primaryGradient = LinearGradient(
     colors: [Color(0xFF1D4ED8), Color(0xFF3B82F6)],

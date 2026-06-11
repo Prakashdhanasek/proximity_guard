@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:proximity_guard/l10n/language_picker.dart';
 import '../../controllers/pre_trip_controller.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
@@ -11,6 +12,11 @@ import 'ready_to_start_view.dart';
 /// Pre-trip flow WITHOUT the blue app-bar header. The verification screens
 /// (Identity / Vehicle / Inspect / Start) are clean and full; the branded
 /// header only appears later, after the ride starts (DrivingHudView).
+///
+/// A small language (globe) button sits at the top-right so a driver can change
+/// the app language BEFORE/DURING verification — important for someone who
+/// can't read the current language (the language setting is otherwise only
+/// reachable from Settings, after the whole flow).
 class PreTripFlowView extends StatelessWidget {
   const PreTripFlowView({super.key});
 
@@ -23,7 +29,17 @@ class PreTripFlowView extends StatelessWidget {
           builder: (context, preTripController, _) {
             return Column(
               children: [
-                const SizedBox(height: 16),
+                // Top bar: just the language switcher (no branded header).
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Row(
+                    children: const [
+                      Spacer(),
+                      LanguageButton(),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
                 _buildStepIndicator(
                   context,
                   preTripController.activeSteps,
